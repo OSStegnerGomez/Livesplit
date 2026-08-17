@@ -356,14 +356,35 @@ class App:
 
     def update_labels(self):
 
-        #self.seg_info_cache = get_seg_list_info(self.seg_order,self.        print(f"[DEBUG] {self.curseg=}")
-        #timers        
-        self.main_timer_label.configure(text=formatA(self.main_timer))
-        self.seg_timer_label.configure(text=formatA(self.seg_timer))
+        #timers
+        right_fg = "white"   
+        curseg = self.curseg
+        split_times = self.split_times
 
         #info
         seg_info = self.seg_info_cache["final_list"]
-        seg_repr = seg_list_repr(seg_info,compare_to=self.split_times,split_times=self.latest_splits)
+        seg_repr = seg_list_repr(
+            seg_info
+            ,compare_to=split_times
+            ,split_times=self.latest_splits
+            ,best_segs=best_segments
+            )
+
+        main_slower_than_pb = self.seg_timer > el_by_ind(split_times,curseg)-el_by_ind(split_times,curseg-1,"restr_neg_ind",default=0)
+        if self.main_timer_running():
+            right_fg  = (
+                "red" if main_slower_than_pb else "#FF8080"
+                ) if split_times[curseg] < self.main_timer else (
+                "#80FF80" if main_slower_than_pb else "green"
+                )
+        if len(self.latest_splits)==len(self.split_times):
+            right_fg = "red" if self.main_timer > split_times[-1] else "blue"
+
+        self.main_timer_label.configure(
+            text=formatA(self.main_timer)
+            ,fg=right_fg)
+        self.seg_timer_label.configure(text=formatA(self.seg_timer)) 
+        
         for i,(left,right,bgframe) in enumerate(
             zip(self.left_segment_labels,self.right_segment_labels,self.seg_backframes)
             ):
@@ -376,23 +397,33 @@ class App:
                 continue
 
             bg = "#202020" if i%2 else "#000000"
-            print(f"[TEST] {seg_info=}")
             if self.curseg in range(seg_i[1][0],seg_i[1][1]+1):
                 bg = "#000080" if seg_i[0][0]%2 else "#000060"
             bgframe.configure(bg=bg)
             left.configure(bg=bg)
             right.configure(bg=bg)
-            left_text,middle_text,right_text = seg_r["text"]
+            left_text,mid_timer,right_text = seg_r["text"]
             left.configure(text=left_text)
-            mid_text = "" if not middle_text else f"{middle_text:+.1f}"
-            right.configure(text=f"{mid_text}   {formatB(right_text)}")
+            mid_text = "" if mid_timer is None else f"{mid_timer:+.1f}"
+            slower_than_pb = (seg_r["latest"]) and (seg_r["latest"] > seg_r["time"])
+            right_fg = "white" if mid_timer is None else "gold" if seg_r["latest"] < seg_r["best"] else (
+                (
+                    "#80FF80" if slower_than_pb else "green"
+                ) if mid_timer < 0 else (
+                    "red" if slower_than_pb else "#FF8080"
+                )
+                )
+            right.configure(text=f"{mid_text}   {formatB(right_text)}",fg=right_fg)
         
     
     def run(self):
         self.w.mainloop()
             
 
-app = App("Custom Livesplit v 3.0",segment_names,split_times=splits["PB"])
+app = App("Custom Livesplit v 3.0",
+          segment_names,
+          split_times=splits["PB"],
+          best_times = best_segments
+          )
 app.run()
-
   
