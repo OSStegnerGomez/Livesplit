@@ -20,36 +20,6 @@ def ordinal_num(n: int) -> str:
         suffix = ['th', 'st', 'nd', 'rd', 'th'][min(n % 10, 4)]
     return f"{n}{suffix}"
 
-
-
-segment_names = [
-            "--Akt 1",
-            "--Spezial 1",
-            "--Akt 2",
-            "--Spezial 2"
-            ,"-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
-            "--Akt 1: EIN ZYKLUS!",
-            "--Spezial 3: SPRING!",
-            "--Akt 2: Bitte nicht alle Ringe verlieren.",
-            "--Spezial 4",
-            "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
-            "--Akt 1: NOCH EIN ZYKLUS!",
-            "--Spezial 5",
-            "--Akt 2: ETWAS HEIKLIG!",
-            "--Spezial 6: SPRING!!",
-            "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
-            "--Akt 1: Wasserphysik!",
-            "--Akt 2: Nützlicher Sprungfeder!",
-            "-♂🚿 00.11 Turnhalle-Umkleideraum [Akt=Waschbecken]|Akt 3: PARKOURZEIT!",
-            "--Akt 1: Sie schauen da ein guten Film",
-            "--Akt 2: Sie schauen sich gerade „Golden“ an.",
-            "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
-            "--📍 Akt 1: Raummitte[Da wird auch Film geschaut!]",
-            "--🍳 Akt 2: Kochnische(↓) [Da wird gekocht!]",
-            "--🚰 Akt 3: Waschbecken 4 [Das ist schlau!]",
-            "Sonic 1 GBA|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 Akt 4: Kochnische(↑) [WIEDER HEIKLIG]",
-            ]
-
 def el_by_ind(_list,ind,*args,**kwargs):
     default = kwargs.get("default")
     if ind < 0 and "restr_neg_ind" in args:
@@ -92,10 +62,12 @@ def segment_order(seg_names):
                     popp[0][1]=val_cnt[popp[0][0]]
                     val_cnt[popp[0][0]]+=1
                     final.append(popp)
+    
     return final
 
 
-def get_seg_list_info(seg_list,curseg=None):
+def get_seg_list_info(seg_list,**kwargs):
+    curseg = kwargs.get("curseg")
     info = {"list":seg_list}
     if curseg is None:
         info["final_list"] = info["list"]
@@ -173,13 +145,15 @@ def seg_list_repr(_list,**kwargs):
                 "text":(left,middle,right),
                 "time":seg_time,
                 "best": best_seg,
-                "latest": latest_seg
+                "latest": latest_seg,
+                "range": seg[1],
+                "depth_ind": seg[0]
                 })
         return _repr
         
 best_segments = [
-        [1583.29],[194,371,328.11,204,187.77,265.4],
-        [38.29,18.6,43,26,63.14,86.89,18.9,102.19,28.25,117.56,76.73,38.34,63.31,15,131.56,60.33,
+        [1583.29],[194,368,328.11,204,187.77,265.4],
+        [38.29,18.6,43,26,63.14,86.89,18.9,100.16,28.25,117.56,76.73,38.34,63.31,15,131.56,60.33,
         33.5,107.96,52.75,49.08,82.58,62.14,64.30,39.49,80]
     ]
 splits = {
@@ -190,16 +164,33 @@ splits = {
     ]
 }
 
-order = segment_order(segment_names)
-#print(f"{order=}")
-info = get_seg_list_info(order,2)
-#print(info)
-_repr = seg_list_repr(
-    info["final_list"],
-    compare_to=splits["PB"],
-    best_segs=best_segments,
-    split_times = [40,60,100,140,200,285,305,420,450,575]
-    )
+segment_names = [
+            "--Akt 1",
+            "--Spezial 1",
+            "--Akt 2",
+            "--Spezial 2"
+            ,"-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
+            "--Akt 1: EIN ZYKLUS!",
+            "--Spezial 3: SPRING!",
+            "--Akt 2: Bitte nicht alle Ringe verlieren.",
+            "--Spezial 4",
+            "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
+            "--Akt 1: NOCH EIN ZYKLUS!",
+            "--Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
+            "--Akt 2: ETWAS HEIKLIG!",
+            "--Spezial 6: SPRING!!",
+            "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
+            "--Akt 1: Wasserphysik!",
+            "--Akt 2: Nützlicher Sprungfeder!",
+            "-♂🚿 00.11 Turnhalle-Umkleideraum [Akt=Waschbecken]|Akt 3: PARKOURZEIT!",
+            "--Akt 1: Sie schauen da ein guten Film",
+            "--Akt 2: Sie schauen sich gerade „Golden“ an.",
+            "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
+            "--📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
+            "--🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
+            "--🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
+            "Sonic 1 GBA|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 Akt 4 [Kochnische(↑)]: WIEDER HEIKLIG!",
+            ]
 
 
 import tkinter as tk
@@ -217,7 +208,7 @@ class App:
         self.best_segs = kwargs.get("best_segs") or []
         self.split_times = kwargs.get("split_times") or []
         self.latest_splits = []
-        self.seg_info_cache = get_seg_list_info(self.seg_order,self.curseg+1)
+        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=self.curseg+1)
 
 
         # timing
@@ -255,12 +246,12 @@ class App:
         #place timers
         self.main_timer_label = tk.Label(font=("Consolas",25))
         self.seg_timer_label = tk.Label(font=("Consolas",15))
-        self.best_seg_label = tk.Label(font=("Consolas",10))
-        self.pb_seg_label = tk.Label(font=("Consolas",10))
+        self.best_seg_labels =[tk.Label(text="Cartman",font=("Consolas",8)) for i in range(3)]
+        self.pb_seg_labels =[tk.Label(text="Cartman",font=("Consolas",8)) for i in range(3)]
         self.main_timer_label.place(relx=0.5, rely=0.82,anchor="center")
         self.seg_timer_label.place(relx=0.5, rely=0.9,anchor="center")
-        self.best_seg_label.place(relx=0, rely=0.84)
-        self.pb_seg_label.place(relx=0, rely=0.9)
+        [label.place(relx=0, rely=0.72+0.08*i) for i, label in enumerate(self.best_seg_labels)]
+        [label.place(relx=0, rely=0.76+0.08*i) for i, label in enumerate(self.pb_seg_labels)]
         
         #define
         self.seg_backframes = [tk.Frame() for _ in range(11)]
@@ -310,7 +301,7 @@ class App:
         self.stop = None
         self.main_timer = 0.0
         self.latest_splits = []
-        self.seg_info_cache = get_seg_list_info(self.seg_order,len(self.latest_splits))
+        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
 
 
     def _split(self):
@@ -323,7 +314,7 @@ class App:
             self._pause_main_timer()
         else:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Splitted into the {ordinal_num(len(self.latest_splits)+1)} overall segment at {formatA(self.main_timer)}.")
-        self.seg_info_cache = get_seg_list_info(self.seg_order,len(self.latest_splits))
+        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
 
 
     def _desplit(self):
@@ -333,7 +324,7 @@ class App:
         if self.main_timer_running():
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the {ordinal_num(len(self.latest_splits))} segment.")
             self.latest_splits.pop()
-            self.seg_info_cache = get_seg_list_info(self.seg_order,len(self.latest_splits))
+            self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
         elif len(self.latest_splits)==self.seg_count:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the {ordinal_num(len(self.latest_splits))} segment.")
             self.latest_splits.pop()
@@ -362,9 +353,10 @@ class App:
         split_times = self.split_times
 
         #info
-        seg_info = self.seg_info_cache["final_list"]
+        seg_info = self.seg_info_cache
+        final_list = seg_info["final_list"]
         seg_repr = seg_list_repr(
-            seg_info
+            final_list
             ,compare_to=split_times
             ,split_times=self.latest_splits
             ,best_segs=best_segments
@@ -383,27 +375,50 @@ class App:
         self.main_timer_label.configure(
             text=formatA(self.main_timer)
             ,fg=right_fg)
-        self.seg_timer_label.configure(text=formatA(self.seg_timer)) 
+        self.seg_timer_label.configure(text=formatA(self.seg_timer))
+
+
+        for i in range(len(self.best_seg_labels)):
+            try:
+                curseg_cursor = next(
+                (e for e in seg_repr if e["range"][1]>=self.curseg and e["depth_ind"][0]==i),None
+                 )
+                best_text = curseg_cursor.get("best") or "-----.--"
+                time_text = curseg_cursor.get("time") or "-----.--"
+    
+                if not self.main_timer_running():
+                    best_text = time_text = ""
+                else:
+                    best_text = f'BEST [↧{i}]: {formatA(best_text)}'
+                    time_text = f'TIME [↧{i}]: {formatA(time_text)}'
+            
+                self.best_seg_labels[i].configure(text=best_text)        
+                self.pb_seg_labels[i].configure(text=time_text)
+            except Exception as e:
+                print("Something went wrong, whilst extracting BEST and TARGET Times:")
+                print("->",e)
+
         
         for i,(left,right,bgframe) in enumerate(
             zip(self.left_segment_labels,self.right_segment_labels,self.seg_backframes)
             ):
             try:
                 seg_r = seg_repr[i]
-                seg_i = seg_info[i]
+                seg_i = final_list[i]
             except IndexError:
                 left.configure(text="")
                 right.configure(text="")
                 continue
 
             bg = "#202020" if i%2 else "#000000"
-            if self.curseg in range(seg_i[1][0],seg_i[1][1]+1):
+            if self.curseg in range(seg_i[1][0],seg_i[1][1]+1) and self.main_timer_running():
                 bg = "#000080" if seg_i[0][0]%2 else "#000060"
             bgframe.configure(bg=bg)
             left.configure(bg=bg)
             right.configure(bg=bg)
             left_text,mid_timer,right_text = seg_r["text"]
             left.configure(text=left_text)
+            print(f"[test] {seg_r=}")
             mid_text = "" if mid_timer is None else f"{mid_timer:+.1f}"
             slower_than_pb = (seg_r["latest"]) and (seg_r["latest"] > seg_r["time"])
             right_fg = "white" if mid_timer is None else "gold" if seg_r["latest"] < seg_r["best"] else (
@@ -426,4 +441,5 @@ app = App("Custom Livesplit v 3.0",
           best_times = best_segments
           )
 app.run()
+
   
