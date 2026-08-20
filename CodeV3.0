@@ -145,9 +145,10 @@ def seg_list_repr(_list,**kwargs):
                 "text":(left,middle,right),
                 "time":seg_time,
                 "best": best_seg,
-                "latest": latest_seg,
                 "range": seg[1],
-                "depth_ind": seg[0]
+                "depth_ind": seg[0],
+                "latest": latest_seg,
+                "start": el_by_ind(latest_splits,seg_start_ind-1,"restr_neg_ind",default=0)
                 })
         return _repr
         
@@ -337,10 +338,8 @@ class App:
         if self. main_timer_running():
             self.curseg = len(self.latest_splits)
 
-        self.main_timer = ((self.stop or time.time())-self.start) if self.start else self.main_timer
+        self.main_timer = (((self.stop or time.time())-self.start) if self.start else self.main_timer)
         self.seg_timer  = self.main_timer-(0 if not self.latest_splits else self.latest_splits[-1])
-
-
 
         self.update_labels()
         self.w.after(10,self.update_loop)
@@ -378,27 +377,30 @@ class App:
         self.seg_timer_label.configure(text=formatA(self.seg_timer))
 
 
-        for i in range(len(self.best_seg_labels)):
-            try:
-                curseg_cursor = next(
+        curseg_cursors = [next(
                 (e for e in seg_repr if e["range"][1]>=self.curseg and e["depth_ind"][0]==i),None
-                 )
-                best_text = curseg_cursor.get("best") or "-----.--"
-                time_text = curseg_cursor.get("time") or "-----.--"
+                 ) for i in range(len(self.best_seg_labels))]
+
+        for i,(cursor,best_l,pb_l) in enumerate(zip(
+            curseg_cursors,self.best_seg_labels,self.pb_seg_labels
+            )):
+            try:
+                best_text = cursor.get("best") or "-----.--"
+                time_text = cursor.get("time") or "-----.--"
     
                 if not self.main_timer_running():
                     best_text = time_text = ""
                 else:
                     best_text = f'BEST [↧{i}]: {formatA(best_text)}'
                     time_text = f'TIME [↧{i}]: {formatA(time_text)}'
-            
-                self.best_seg_labels[i].configure(text=best_text)        
-                self.pb_seg_labels[i].configure(text=time_text)
+                best_l.configure(text=best_text)        
+                pb_l.configure(text=time_text)
             except Exception as e:
                 print("Something went wrong, whilst extracting BEST and TARGET Times:")
-                print("->",e)
+                print(f"At Index {i} ->",e)
 
-        
+
+
         for i,(left,right,bgframe) in enumerate(
             zip(self.left_segment_labels,self.right_segment_labels,self.seg_backframes)
             ):
@@ -411,16 +413,32 @@ class App:
                 continue
 
             bg = "#202020" if i%2 else "#000000"
-            if self.curseg in range(seg_i[1][0],seg_i[1][1]+1) and self.main_timer_running():
+            if self.curseg in range(seg_i[1][0],seg_i[1][1]+1) and (self.start is not None) and len(self.latest_splits)!=len(self.split_times):
                 bg = "#000080" if seg_i[0][0]%2 else "#000060"
             bgframe.configure(bg=bg)
             left.configure(bg=bg)
             right.configure(bg=bg)
-            left_text,mid_timer,right_text = seg_r["text"]
-            left.configure(text=left_text)
-            print(f"[test] {seg_r=}")
-            mid_text = "" if mid_timer is None else f"{mid_timer:+.1f}"
-            slower_than_pb = (seg_r["latest"]) and (seg_r["latest"] > seg_r["time"])
+            
+            left_text,mid_timer,right_time = seg_r["text"]
+            left.configure(text=f"{' '*seg_r['depth_ind'][0]}{left_text}")
+            mid_text = (
+                "" if not seg_r in curseg_cursors else (
+                    (
+                        f"{(self.main_timer-seg_r['text'][2]):+.1f}" if (
+                                self.main_timer>seg_r['text'][2] or self.main_timer-seg_r['start'] > seg_r["best"]
+                            ) else ""
+                        ) if (
+                        seg_r["depth_ind"][0]+1 == len(curseg_cursors)
+                        ) else (
+                        formatA(self.main_timer-seg_r['start'])
+                        ))) if mid_timer is None else f"{mid_timer:+.1f}"
+            right_text = (
+                formatB(seg_r["time"]) if (self.main_timer-seg_r["start"])<seg_r["time"] else f"{(self.main_timer-seg_r['start']-seg_r['time']):+.1f}"
+                ) if (
+                len(self.latest_splits)!=len(self.split_times) and seg_r in curseg_cursors and seg_r["depth_ind"][0]+1 != len(curseg_cursors)
+                ) else formatB(right_time)
+            
+            slower_than_pb = seg_r["latest"] and (seg_r["latest"] > seg_r["time"])
             right_fg = "white" if mid_timer is None else "gold" if seg_r["latest"] < seg_r["best"] else (
                 (
                     "#80FF80" if slower_than_pb else "green"
@@ -428,7 +446,9 @@ class App:
                     "red" if slower_than_pb else "#FF8080"
                 )
                 )
-            right.configure(text=f"{mid_text}   {formatB(right_text)}",fg=right_fg)
+            #if random() < 0.001:
+            #    print(f"[test] {seg_r['depth_ind'][0]=}")
+            right.configure(text=f"{mid_text}   {right_text}",fg=right_fg)
         
     
     def run(self):
