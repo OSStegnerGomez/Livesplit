@@ -386,14 +386,17 @@ class App:
             curseg_cursors,self.best_seg_labels,self.pb_seg_labels
             )):
             try:
-                best_text = cursor.get("best") or "-----.--"
-                time_text = cursor.get("time") or "-----.--"
-    
+                best_text = cursor.get("best")
+                time_text = cursor.get("time")
+
+                best_text = "-----.--" if best_text is None else formatA(best_text)
+                time_text = "-----.--" if time_text is None else formatA(time_text)
+                
                 if not self.main_timer_running():
                     best_text = time_text = ""
                 else:
-                    best_text = f'BEST [↧{i}]: {formatA(best_text)}'
-                    time_text = f'TIME [↧{i}]: {formatA(time_text)}'
+                    best_text = f'BEST [↧{i}]: {best_text}'
+                    time_text = f'TIME [↧{i}]: {time_text}'
                 best_l.configure(text=best_text)        
                 pb_l.configure(text=time_text)
             except Exception as e:
