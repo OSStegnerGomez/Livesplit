@@ -1,27 +1,54 @@
-from copy import deepcopy
-from random import random
+from __future__ import annotations
 
-def flatten_list(x):
+from dataclasses import dataclass
+from copy import deepcopy
+from datetime import datetime
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
+
+import time
+import tkinter as tk
+import keyboard
+
+
+# =========================
+# Utility functions
+# =========================
+
+def flatten_list(x: Iterable[Iterable[Any]]) -> List[Any]:
     return [n for ns in x for n in ns]
 
-def formatA(x: int) -> str:
-    if x < 0: return f"-{formatA(-x)}"
+
+def formatA(x: float | None) -> str:
+    """Format a float as 8-wide, 2 decimals, with sign handling."""
+    if x is None: return "-----.--"
+    if x < 0:
+        return f"-{formatA(-x)}"
     return f"{x:.02f}".zfill(8)
 
-def formatB(x: int) -> str:
-    if x < 0: return f"-{formatB(-x)}"
+
+def formatB(x: float) -> str:
+    """Format an int as 5-wide, with sign handling."""
+    if x < 0:
+        return f"-{formatB(-x)}"
     return f"{int(x)}".zfill(5)
 
+
 def ordinal_num(n: int) -> str:
-    """Convert an integer into its ordinal representation (e.g. 1 -> '1st')"""
+    """Convert an integer into its ordinal representation (e.g. 1 -> '1st')."""
     if 11 <= (n % 100) <= 13:
-        suffix = 'th'
+        suffix = "th"
     else:
-        suffix = ['th', 'st', 'nd', 'rd', 'th'][min(n % 10, 4)]
+        suffix = ["th", "st", "nd", "rd", "th"][min(n % 10, 4)]
     return f"{n}{suffix}"
 
-def el_by_ind(_list,ind,*args,**kwargs):
-    default = kwargs.get("default")
+
+def el_by_ind(
+    _list: Sequence[Any],
+    ind: int,
+    *args: str,
+    default: Any = None,
+) -> Any:
+    """Safe index access with optional restriction for negative indices."""
     if ind < 0 and "restr_neg_ind" in args:
         return default
     try:
@@ -30,242 +57,331 @@ def el_by_ind(_list,ind,*args,**kwargs):
         return default
 
 
-def segment_order(seg_names):
-    final = []
-    segs = [[[0,0], [0, i], seg_name] for i,seg_name in enumerate(seg_names)]
+# =========================
+# Segment representation
+# =========================
+
+@dataclass
+class RawSegment:
+    """Internal representation used by segment_order, matching your original structure."""
+    depth: int
+    depth_index: int
+    start: int
+    end: int
+    name: str
+
+    @classmethod
+    def from_triplet(cls, triplet: List[Any]) -> "RawSegment":
+        (depth, depth_index), (start, end), name = triplet
+        return cls(depth=depth, depth_index=depth_index, start=start, end=end, name=name)
+
+    def to_triplet(self) -> List[Any]:
+        return [[self.depth, self.depth_index], [self.start, self.end], self.name]
+
+
+# =========================
+# Segment ordering
+# =========================
+
+def segment_order(seg_names: Sequence[str]) -> List[List[Any]]:
+    """
+    Build the segment order list from segment names.
+
+    This preserves your original logic:
+    - Leading '-' increases depth.
+    - '|' splits a segment into nested parts.
+    - latest[] and val_cnt[] track indices per depth.
+    """
+    final: List[List[Any]] = []
+    segs: List[List[Any]] = [
+        [[0, 0], [0, i], seg_name] for i, seg_name in enumerate(seg_names)
+    ]
+
     latest = [0 for _ in range(10)]
     val_cnt = [0 for _ in range(10)]
+
     while segs:
         i = 0
         while i < len(segs):
             seg = segs[i]
-            if seg[2][0]=="-":
-                seg[0][0]+=1
-                seg[2] = seg[2][1:]
-                i+=1
+            depth_info, range_info, name = seg
+
+            # Handle leading '-' → increase depth
+            if name and name[0] == "-":
+                depth_info[0] += 1
+                seg[2] = name[1:]
+                i += 1
+                continue
+
+            # Handle '|' splits
+            vert_bar = name.find("|")
+            if vert_bar != -1:
+                seg_copy = deepcopy(seg)
+                seg_copy[2] = name[:vert_bar]
+                seg_copy[1][0] = latest[seg_copy[0][0]]
+                seg_copy[0][1] = val_cnt[seg_copy[0][0]]
+                val_cnt[seg_copy[0][0]] += 1
+                final.append(seg_copy)
+
+                latest[seg_copy[0][0]] = seg_copy[1][1] + 1
+                seg[2] = name[vert_bar + 1 :]
+                seg[0][0] += 1
+                break
             else:
-                vert_bar = seg[2].find("|")
-                if vert_bar != -1:
-                    seg_copy = deepcopy(seg)
-                    seg_copy[2] = seg[2][:vert_bar]
-                    seg_copy[1][0] = latest[seg_copy[0][0]]
-                    seg_copy[0][1]=val_cnt[seg_copy[0][0]]
-                    val_cnt[seg_copy[0][0]]+=1     
-                    final.append(seg_copy)
-                    latest[seg_copy[0][0]] = seg_copy[1][1]+1
-                    seg[2]= seg[2][vert_bar+1:]
-                    seg[0][0]+=1
-                    break
-                else:
-                    popp = segs.pop(i)
-                    popp[1][0]=popp[1][1]
-                    popp[0][1]=val_cnt[popp[0][0]]
-                    val_cnt[popp[0][0]]+=1
-                    final.append(popp)
-    
+                # No more splits → finalize
+                popp = segs.pop(i)
+                popp[1][0] = popp[1][1]
+                popp[0][1] = val_cnt[popp[0][0]]
+                val_cnt[popp[0][0]] += 1
+                final.append(popp)
+
     return final
 
 
-def get_seg_list_info(seg_list,**kwargs):
-    curseg = kwargs.get("curseg")
-    info = {"list":seg_list}
+# =========================
+# Segment list info
+# =========================
+
+def get_seg_list_info(seg_list: List[List[Any]], **kwargs: Any) -> dict:
+    """
+    Compute chain and final_list for a given current segment index (curseg).
+
+    This is a cleaned version of your original logic, preserving behavior.
+    """
+    curseg: Optional[int] = kwargs.get("curseg")
+    info: dict = {"list": seg_list}
+
     if curseg is None:
         info["final_list"] = info["list"]
         return info
-    elif curseg >= max([e[1][1] for e in seg_list]):
-        curseg = max([e[1][1] for e in seg_list])-1
+
+    max_end = max(e[1][1] for e in seg_list)
+    if curseg >= max_end:
+        curseg = max_end - 1
+
     curdepth = 0
-    info = {}
-    seg_chain = []
+    seg_chain: List[List[Any]] = []
+
     while True:
-        bucket = [e for e in seg_list if e[0][0]==curdepth]
-        espege = next((e for e in bucket if e[1][1]>=curseg),None)
+        bucket = [e for e in seg_list if e[0][0] == curdepth]
+        espege = next((e for e in bucket if e[1][1] >= curseg), None)
         if not espege:
             break
-        else:
-            seg_chain.append(espege)
-        curdepth+=1
-    seg_blocks = [[e for e in seg_list if e[0][0]==0]]
+        seg_chain.append(espege)
+        curdepth += 1
+
+    seg_blocks: List[List[List[Any]]] = [[e for e in seg_list if e[0][0] == 0]]
     for seg in seg_chain[:-1]:
-     seg_blocks.append([e for e in seg_list if e[0][0]==seg[0][0]+1 and e[1][0] >= seg[1][0] and e[1][0] <= seg[1][1]])
-    final_block_stack = []
-  # last_choosen = []
+        seg_blocks.append(
+            [
+                e
+                for e in seg_list
+                if e[0][0] == seg[0][0] + 1
+                and e[1][0] >= seg[1][0]
+                and e[1][0] <= seg[1][1]
+            ]
+        )
+
+    final_block_stack: List[List[Any]] = []
     next_choosen_ind = 0
-    for i,block in enumerate(seg_blocks):   
+
+    for i, block in enumerate(seg_blocks):
         for seg in block:
             if seg[1][1] >= curseg:
                 final_block_stack[next_choosen_ind:next_choosen_ind] = block
-                last_choosen=block
-                next_choosen_ind=final_block_stack.index(seg_chain[i])+1
+                next_choosen_ind = final_block_stack.index(seg_chain[i]) + 1
                 break
+
     info["chain"] = [e[2] for e in seg_chain]
     info["final_list"] = final_block_stack
     info["curseg_cursor"] = final_block_stack.index(seg_chain[-1])
-    return info    
+    return info
 
-def seg_list_repr(_list,**kwargs):
-        _repr = []
 
-        best_segs = kwargs.get("best_segs") or []
-        split_times = kwargs.get("compare_to") or []
-        latest_splits = kwargs.get("split_times") or []
+# =========================
+# Segment list representation
+# =========================
 
-        while len(best_segs) < 10:
-            best_segs.append([])        
+def seg_list_repr(_list: List[List[Any]], **kwargs: Any) -> List[dict]:
+    """
+    Build a representation of segments including:
+    - text (left, middle, right)
+    - time (PB segment time)
+    - best (best segment time)
+    - latest (latest segment time)
+    - start (start time of segment in latest_splits)
+    """
+    _repr: List[dict] = []
 
-        for i in range(len(_list)):
-            #Define the zip
-            seg = _list[i]
-            seg_depth,   seg_depth_ind = seg[0]
-            seg_start_ind, seg_end_ind = seg[1]
-            split_time = el_by_ind(split_times,seg_end_ind)
-            latest_split = el_by_ind(latest_splits,seg_end_ind)
+    best_segs: List[List[float]] = kwargs.get("best_segs") or []
+    split_times: List[float] = kwargs.get("compare_to") or []
+    latest_splits: List[float] = kwargs.get("split_times") or []
 
-            #Start the zip
-            left, middle, right=(None,None,None)
-            left = seg[2]
-            right = latest_split or split_time
+    while len(best_segs) < 10:
+        best_segs.append([])
 
-            try:
-                seg_time = el_by_ind(split_times,seg_end_ind)-el_by_ind(split_times,seg_start_ind-1,"restr_neg_ind",default=0)
-            except ValueError:
-                seg_time = None
+    for seg in _list:
+        seg_depth, seg_depth_ind = seg[0]
+        seg_start_ind, seg_end_ind = seg[1]
 
-            best_seg = el_by_ind(el_by_ind(best_segs,seg_depth,default=[]),seg_depth_ind,None)
-            try:
-                latest_seg = latest_split- el_by_ind(latest_splits,seg_start_ind-1,"restr_neg_ind",default=0)
-            except:
-                latest_seg = None
-            
-            if not (latest_split is None or split_time is None):
-                middle = latest_split-split_time
-            
-           # print("[REST]",seg,left,right)
-            _repr.append({
-                "text":(left,middle,right),
-                "time":seg_time,
+        split_time = el_by_ind(split_times, seg_end_ind)
+        latest_split = el_by_ind(latest_splits, seg_end_ind)
+
+        left, middle, right = (None, None, None)
+        left = seg[2]
+        right = latest_split or split_time
+
+        try:
+            seg_time = (
+                el_by_ind(split_times, seg_end_ind)
+                - el_by_ind(split_times, seg_start_ind - 1, "restr_neg_ind", default=0)
+            )
+        except (ValueError, TypeError):
+            seg_time = None
+
+        best_seg = el_by_ind(el_by_ind(best_segs, seg_depth, default=[]), seg_depth_ind, None)
+
+        try:
+            latest_seg = latest_split - el_by_ind(
+                latest_splits, seg_start_ind - 1, "restr_neg_ind", default=0
+            )
+        except Exception:
+            latest_seg = None
+
+        if not (latest_split is None or split_time is None):
+            middle = latest_split - split_time
+
+        _repr.append(
+            {
+                "text": (left, middle, right),
+                "time": seg_time,
                 "best": best_seg,
                 "range": seg[1],
                 "depth_ind": seg[0],
                 "latest": latest_seg,
-                "start": el_by_ind(latest_splits,seg_start_ind-1,"restr_neg_ind",default=0)
-                })
-        return _repr
-        
-best_segments = [
-        [1583.29],[194,368,328.11,204,187.77,265.4],
-        [38.29,18.6,43,26,63.14,86.89,18.9,100.16,28.25,117.56,76.73,38.34,63.31,15,131.56,60.33,
-        33.5,107.96,52.75,49.08,82.58,62.14,64.30,39.49,80]
-    ]
-splits = {
-    "PB": [
-    39.12, 59.29, 103.81, 131.97, 196.55, 283.79, 305.83, 417.4, 445.75, 575.63, 652.36,
-    690.7, 755.91, 772.18, 903.74, 968.23, 1007.81, 1130.12, 1182.87, 1235.31, 1317.89,
-    1380.03, 1448.97, 1489.01, 1583.29
-    ]
-}
+                "start": el_by_ind(
+                    latest_splits, seg_start_ind - 1, "restr_neg_ind", default=0
+                ),
+            }
+        )
 
-segment_names = [
-            "--Akt 1",
-            "--Spezial 1",
-            "--Akt 2",
-            "--Spezial 2"
-            ,"-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
-            "--Akt 1: EIN ZYKLUS!",
-            "--Spezial 3: SPRING!",
-            "--Akt 2: Bitte nicht alle Ringe verlieren.",
-            "--Spezial 4",
-            "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
-            "--Akt 1: NOCH EIN ZYKLUS!",
-            "--Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
-            "--Akt 2: ETWAS HEIKLIG!",
-            "--Spezial 6: SPRING!!",
-            "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
-            "--Akt 1: Wasserphysik!",
-            "--Akt 2: Nützlicher Sprungfeder!",
-            "-♂🚿 00.11 Turnhalle-Umkleideraum [Akt=Waschbecken]|Akt 3: PARKOURZEIT!",
-            "--Akt 1: Sie schauen da ein guten Film",
-            "--Akt 2: Sie schauen sich gerade „Golden“ an.",
-            "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
-            "--📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
-            "--🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
-            "--🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
-            "Sonic 1 GBA|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 Akt 4 [Kochnische(↑)]: WIEDER HEIKLIG!",
-            ]
+    return _repr
 
 
-import tkinter as tk
-import time
-from datetime import datetime
-import keyboard
+# =========================
+# Main App
+# =========================
+
 class App:
-    def __init__(self,name="NEW",seg_names=[],**kwargs):
-
+    TIMER_SPEED = 1
+    SEG_ROW_COUNT = 11
+    
+    def __init__(self, seg_names: Sequence[str] = (), **kwargs: Any) -> None:
         # control
-        self.curseg = 0
-        self.seg_names = seg_names
-        self.seg_order = segment_order(seg_names)
-        self.seg_count = len(seg_names)
-        self.best_segs = kwargs.get("best_segs") or []
-        self.split_times = kwargs.get("split_times") or []
-        self.latest_splits = []
-        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=self.curseg+1)
+        self.curseg: int = 0
+        self.seg_names: List[str] = list(seg_names)
+        self.seg_order: List[List[Any]] = segment_order(self.seg_names)
+        self.seg_count: int = len(self.seg_names)
 
+        self.best_segs: List[List[float]] = kwargs.get("best_segs") or []
+        self.split_times: List[float] = kwargs.get("split_times") or []
+        self.latest_splits: List[float] = []
+
+        self.seg_info_cache: dict = get_seg_list_info(
+            self.seg_order, curseg=self.curseg + 1
+        )
+
+        self.game_name: str = kwargs.get("game_name") or ""
+        self.run_category: str = kwargs.get("run_category") or ""
 
         # timing
-        self.main_timer = 0
-        self.start = None
-        self.seg_timer = 0
-        self.stop = None
+        self.main_timer: float = 0.0
+        self.start: Optional[float] = None
+        self.seg_timer: float = 0.0
+        self.stop: Optional[float] = None
 
         # tkinter
         self.w = tk.Tk()
-        self.name = name
         self.setup_window()
         self.setup_labels()
         self.setup_hotkeys()
         self.update_loop()
 
-    def setup_window(self):
-        self.w.title(self.name)
+    # -------------------------
+    # Setup
+    # -------------------------
+
+    # -------------------------
+    # - Window
+    # -------------------------
+
+    def setup_window(self) -> None:
+        self.w.title("Custom Livesplit App v3.0.1 (Cleaned)")
         self.w.geometry("450x450")
         self.w.configure(bg="black")
         self.w.option_add("*Background", "black")
         self.w.option_add("*Foreground", "white")
         self.w.resizable(False, False)
 
-    def setup_hotkeys(self):
-        keyboard.add_hotkey('z', lambda: self.read_instruction("START"))
-        keyboard.add_hotkey('x', lambda: self.read_instruction("HELLO!"))
-        keyboard.add_hotkey('shift + q', lambda: self.read_instruction("PAUSE"))
-        keyboard.add_hotkey('s', lambda: self.read_instruction("SPLIT"))
-        keyboard.add_hotkey('shift + s', lambda: self.read_instruction("DESPLIT"))
-        keyboard.add_hotkey('ctrl + shift + q', lambda: self.read_instruction("RESET"))
+    # -------------------------
+    # - Hotkeys
+    # -------------------------
+
+    def setup_hotkeys(self) -> None:
+        keyboard.add_hotkey("z", lambda: self.read_instruction("START"))
+        keyboard.add_hotkey("x", lambda: self.read_instruction("HELLO!"))
+        keyboard.add_hotkey("shift + q", lambda: self.read_instruction("PAUSE"))
+        keyboard.add_hotkey("s", lambda: self.read_instruction("SPLIT"))
+        keyboard.add_hotkey("shift + s", lambda: self.read_instruction("DESPLIT"))
+        keyboard.add_hotkey("ctrl + shift + q", lambda: self.read_instruction("RESET"))
+
+    # -------------------------
+    # - Labels
+    # -------------------------
 
 
-    def setup_labels(self):
-        #place timers
-        self.main_timer_label = tk.Label(font=("Consolas",25))
-        self.seg_timer_label = tk.Label(font=("Consolas",15))
-        self.best_seg_labels =[tk.Label(text="Cartman",font=("Consolas",8)) for i in range(3)]
-        self.pb_seg_labels =[tk.Label(text="Cartman",font=("Consolas",8)) for i in range(3)]
-        self.main_timer_label.place(relx=0.5, rely=0.82,anchor="center")
-        self.seg_timer_label.place(relx=0.5, rely=0.9,anchor="center")
-        [label.place(relx=0, rely=0.72+0.08*i) for i, label in enumerate(self.best_seg_labels)]
-        [label.place(relx=0, rely=0.76+0.08*i) for i, label in enumerate(self.pb_seg_labels)]
-        
-        #define
+    def setup_labels(self) -> None:
+        # timers
+        self.main_timer_label = tk.Label(font=("Consolas", 25))
+        self.seg_timer_label = tk.Label(font=("Consolas", 15))
+        self.best_seg_labels = [tk.Label(font=("Consolas", 8)) for _ in range(3)]
+        self.pb_seg_labels = [tk.Label(font=("Consolas", 8)) for _ in range(3)]
+        self.bpt_label = tk.Label(font=("Consolas", 8))
+
+        self.main_timer_label.place(relx=0.5, rely=0.82, anchor="center")
+        self.seg_timer_label.place(relx=0.5, rely=0.88, anchor="center")
+        self.bpt_label.place(relx=0.5, rely=0.92, anchor="center")
+
+        for i, label in enumerate(self.best_seg_labels):
+            label.place(relx=0, rely=0.76 + 0.08 * i)
+        for i, label in enumerate(self.pb_seg_labels):
+            label.place(relx=0, rely=0.8 + 0.08 * i)
+
+        # segments
         self.seg_backframes = [tk.Frame() for _ in range(11)]
-        self.game_name_label = tk.Label(font=("Consolas",15))
-        self.left_segment_labels = [tk.Label(font=("Consolas",10) ) for _ in range(11)]
-        self.right_segment_labels = [tk.Label(font=("Consolas",10) ) for _ in range(11)]
+        self.game_name_label = tk.Label(text=self.game_name, font=("Consolas", 12))
+        self.run_category_label = tk.Label(text=self.run_category, font=("Consolas", 10))
+        self.left_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.middle_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.right_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
 
-        #place
-        [frame.place(relwidth=1, height=21, y=i*21+80) for  i, frame in enumerate(self.seg_backframes)]
-        [label.place(relx=0, y=i*21+90,anchor="w") for i,label in enumerate(self.left_segment_labels)]
-        [label.place(relx=1, y=i*21+90,anchor="e") for i,label in enumerate(self.right_segment_labels)]
+        for i, frame in enumerate(self.seg_backframes):
+            frame.place(relwidth=1, height=21, y=i * 21 + 80)
+        for i, label in enumerate(self.left_segment_labels):
+            label.place(relx=0, y=i * 21 + 90, anchor="w")
+        for i, label in enumerate(self.middle_segment_labels):
+            label.place(relx=0.88, y=i * 21 + 90, anchor="e")
+        for i, label in enumerate(self.right_segment_labels):
+            label.place(relx=1, y=i * 21 + 90, anchor="e")
 
-    def read_instruction(self, cmd):
+        self.game_name_label.place(relx=0.5, y=20, anchor="center")
+        self.run_category_label.place(relx=0.5, y=40, anchor="center")
+
+    # -------------------------
+    # Commands
+    # -------------------------
+
+    def read_instruction(self, cmd: str) -> None:
         match cmd:
             case "START":
                 self._start_main_timer()
@@ -278,188 +394,421 @@ class App:
             case "DESPLIT":
                 self._desplit()
 
+    # -------------------------
+    # Timer control
+    # -------------------------
 
-    def main_timer_running(self):
+    def main_timer_running(self) -> bool:
         return self.start is not None and self.stop is None
 
-    def _start_main_timer(self):
-        if not self.main_timer_running() and len(self.latest_splits)!=self.seg_count:
+    def _start_main_timer(self) -> None:
+        if not self.main_timer_running() and len(self.latest_splits) != self.seg_count:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Started main timer.")
             self.stop = None
-            self.start = time.time() - self.main_timer
+            self.start = time.time() - self.main_timer/App.TIMER_SPEED
+            self.bpt_label.configure(text=f"Best Possible Time: {formatA(self.get_bpt())}")
 
-    def _pause_main_timer(self):
+
+    def _pause_main_timer(self) -> None:
         if self.main_timer_running():
             self.stop = time.time()
-            if len(self.latest_splits)==self.seg_count:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🏁 Finised the run at {formatA(self.main_timer)}.")
+            if len(self.latest_splits) == self.seg_count:
+                print(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] 🏁 Finished the run at {formatA(self.main_timer)}."
+                )
             else:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Paused at {formatA(self.main_timer)}.")
+                print(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] Paused at {formatA(self.main_timer)}."
+                )
+            self.bpt_label.configure(text="")
 
-    def _reset_run(self):
+
+    def _reset_run(self) -> None:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Reset run.")
         self.start = None
         self.stop = None
         self.main_timer = 0.0
         self.latest_splits = []
-        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
+        self.seg_info_cache = get_seg_list_info(self.seg_order, curseg=len(self.latest_splits))
+        self.bpt_label.configure(text="")
 
 
-    def _split(self):
+    def _split(self) -> bool:
         if not self.main_timer_running():
             return False
 
-
         self.latest_splits.append(self.main_timer)
-        if len(self.latest_splits)==self.seg_count:
+        self.bpt_label.configure(text=f"Best Possible Time: {formatA(self.get_bpt())}")
+        if len(self.latest_splits) == self.seg_count:
             self._pause_main_timer()
         else:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Splitted into the {ordinal_num(len(self.latest_splits)+1)} overall segment at {formatA(self.main_timer)}.")
-        self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] Splitted into the "
+                f"{ordinal_num(len(self.latest_splits) + 1)} overall segment at {formatA(self.main_timer)}."
+            )
+        self.seg_info_cache = get_seg_list_info(self.seg_order, curseg=len(self.latest_splits))
+        return True
 
-
-    def _desplit(self):
+    def _desplit(self) -> bool:
         if not self.latest_splits:
-           return False
-        
+            return False
+
         if self.main_timer_running():
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the {ordinal_num(len(self.latest_splits))} segment.")
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the "
+                f"{ordinal_num(len(self.latest_splits))} segment."
+            )
             self.latest_splits.pop()
-            self.seg_info_cache = get_seg_list_info(self.seg_order,curseg=len(self.latest_splits))
-        elif len(self.latest_splits)==self.seg_count:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the {ordinal_num(len(self.latest_splits))} segment.")
+            self.seg_info_cache = get_seg_list_info(self.seg_order, curseg=len(self.latest_splits))
+        elif len(self.latest_splits) == self.seg_count:
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] Desplited back into the "
+                f"{ordinal_num(len(self.latest_splits))} segment."
+            )
             self.latest_splits.pop()
             self._start_main_timer()
+        self.bpt_label.configure(text=f"Best Possible Time: {formatA(self.get_bpt())}")
+        return True
 
+    # -------------------------
+    # Get Best Possible Time
+    # -------------------------
 
-    def update_loop(self):
-        import time
+    def get_bpt(self):
+        seg_order = self.seg_order
+        best_segs = self.best_segs
+        latest = self.latest_splits
+        split_times = self.split_times
 
-        if self. main_timer_running():
+        _repr = seg_list_repr(
+                seg_order
+                ,best_segs=best_segs
+                ,split_times=latest
+                ,compare_to=split_times
+                )
+
+        filtered = [e for e in _repr if e["range"][0]== e["range"][1]]
+        best_seg_times = [e["best"] for e in filtered]
+
+        curseg = len(latest)
+        try:
+            seg_a = [e for e in _repr if e["range"][0] == e["range"][1] and e["range"][1]==curseg][0]["start"]
+            bpt = sum(best_seg_times[curseg:])+seg_a
+        except:
+            return None
+        return bpt
+        
+        
+
+    # -------------------------
+    # Update loop
+    # -------------------------
+        
+
+    def update_loop(self) -> None:
+        if self.main_timer_running():
             self.curseg = len(self.latest_splits)
-
-        self.main_timer = (((self.stop or time.time())-self.start) if self.start else self.main_timer)
-        self.seg_timer  = self.main_timer-(0 if not self.latest_splits else self.latest_splits[-1])
+            
+        now = time.time()
+        self.main_timer = App.TIMER_SPEED*((self.stop or now) - self.start) if self.start else self.main_timer
+        self.seg_timer = self.main_timer - (self.latest_splits[-1] if self.latest_splits else 0.0)
 
         self.update_labels()
-        self.w.after(10,self.update_loop)
+        self.w.after(10, self.update_loop)
 
-    def update_labels(self):
+    # -------------------------
+    # Label updates
+    # -------------------------
 
-        #timers
-        right_fg = "white"   
+
+
+    def update_labels(self) -> None:
+        right_fg = "white"
         curseg = self.curseg
         split_times = self.split_times
 
-        #info
         seg_info = self.seg_info_cache
+        seg_count = self.seg_count
         final_list = seg_info["final_list"]
+
         seg_repr = seg_list_repr(
-            final_list
-            ,compare_to=split_times
-            ,split_times=self.latest_splits
-            ,best_segs=best_segments
+            final_list,
+            compare_to=split_times,
+            split_times=self.latest_splits,
+            best_segs=self.best_segs,
+        )
+
+        # main timer color logic
+        try:
+            main_slower_than_pb = self.seg_timer > (
+                el_by_ind(split_times, curseg)
+                - el_by_ind(split_times, curseg - 1, "restr_neg_ind", default=0)
             )
+        except Exception:
+            main_slower_than_pb = None
 
-        main_slower_than_pb = self.seg_timer > el_by_ind(split_times,curseg)-el_by_ind(split_times,curseg-1,"restr_neg_ind",default=0)
         if self.main_timer_running():
-            right_fg  = (
-                "red" if main_slower_than_pb else "#FF8080"
-                ) if split_times[curseg] < self.main_timer else (
-                "#80FF80" if main_slower_than_pb else "green"
-                )
-        if len(self.latest_splits)==len(self.split_times):
-            right_fg = "red" if self.main_timer > split_times[-1] else "blue"
+            if curseg < len(split_times) and split_times[curseg] and split_times[curseg] < self.main_timer:
+                right_fg = "red" if main_slower_than_pb else "#FF8080"
+            else:
+                right_fg = "#80FF80" if main_slower_than_pb else "green"
 
-        self.main_timer_label.configure(
-            text=formatA(self.main_timer)
-            ,fg=right_fg)
+        if len(self.latest_splits) == self.seg_count:
+            right_fg = "red" if split_times and self.main_timer > split_times[-1] else "blue"
+
+        self.main_timer_label.configure(text=formatA(self.main_timer), fg=right_fg)
         self.seg_timer_label.configure(text=formatA(self.seg_timer))
 
+        # best / pb labels
+        curseg_cursors = [
+            next(
+                (e for e in seg_repr if e["range"][1] >= self.curseg and e["depth_ind"][0] == i),
+                None,
+            )
+            for i in range(len(self.best_seg_labels))
+        ]
 
-        curseg_cursors = [next(
-                (e for e in seg_repr if e["range"][1]>=self.curseg and e["depth_ind"][0]==i),None
-                 ) for i in range(len(self.best_seg_labels))]
+        for i, (cursor, best_l, pb_l) in enumerate(
+            zip(curseg_cursors, self.best_seg_labels, self.pb_seg_labels)
+        ):
+                best_text = cursor.get("best") if cursor else None
+                time_text = cursor.get("time") if cursor else None
 
-        for i,(cursor,best_l,pb_l) in enumerate(zip(
-            curseg_cursors,self.best_seg_labels,self.pb_seg_labels
-            )):
-            try:
-                best_text = cursor.get("best") or "-----.--"
-                time_text = cursor.get("time") or "-----.--"
-    
+                best_str = "-----.--" if best_text is None else formatA(best_text)
+                time_str = "-----.--" if time_text is None else formatA(time_text)
+
                 if not self.main_timer_running():
-                    best_text = time_text = ""
+                    best_str = time_str = ""
                 else:
-                    best_text = f'BEST [↧{i}]: {formatA(best_text)}'
-                    time_text = f'TIME [↧{i}]: {formatA(time_text)}'
-                best_l.configure(text=best_text)        
-                pb_l.configure(text=time_text)
-            except Exception as e:
-                print("Something went wrong, whilst extracting BEST and TARGET Times:")
-                print(f"At Index {i} ->",e)
+                    best_str = f"BEST [↧{i}]: {best_str}"
+                    time_str = f"TIME [↧{i}]: {time_str}"
 
+                best_l.configure(text=best_str)
+                pb_l.configure(text=time_str)
 
-
-        for i,(left,right,bgframe) in enumerate(
-            zip(self.left_segment_labels,self.right_segment_labels,self.seg_backframes)
-            ):
+        # segment rows
+        for i, (left, middle, right, bgframe) in enumerate(
+            zip(
+                self.left_segment_labels,
+                self.middle_segment_labels,
+                self.right_segment_labels,
+                self.seg_backframes,
+            )
+        ):
             try:
                 seg_r = seg_repr[i]
                 seg_i = final_list[i]
             except IndexError:
                 left.configure(text="")
+                middle.configure(text="")
                 right.configure(text="")
                 continue
 
-            bg = "#202020" if i%2 else "#000000"
-            if self.curseg in range(seg_i[1][0],seg_i[1][1]+1) and (self.start is not None) and len(self.latest_splits)!=len(self.split_times):
-                bg = "#000080" if seg_i[0][0]%2 else "#000060"
+            bg = "#202020" if i % 2 else "#000000"
+            if (
+                self.curseg in range(seg_i[1][0], seg_i[1][1] + 1)
+                and self.start is not None
+                and len(self.latest_splits) != self.seg_count
+            ):
+                bg = "#000080" if seg_i[0][0] % 2 else "#000060"
+
             bgframe.configure(bg=bg)
             left.configure(bg=bg)
+            middle.configure(bg=bg)
             right.configure(bg=bg)
-            
-            left_text,mid_timer,right_time = seg_r["text"]
-            left.configure(text=f"{' '*seg_r['depth_ind'][0]}{left_text}")
-            mid_text = (
-                "" if not seg_r in curseg_cursors else (
-                    (
-                        f"{(self.main_timer-seg_r['text'][2]):+.1f}" if (
-                                self.main_timer>seg_r['text'][2] or self.main_timer-seg_r['start'] > seg_r["best"]
-                            ) else ""
-                        ) if (
-                        seg_r["depth_ind"][0]+1 == len(curseg_cursors)
-                        ) else (
-                        formatA(self.main_timer-seg_r['start'])
-                        ))) if mid_timer is None else f"{mid_timer:+.1f}"
-            right_text = (
-                formatB(seg_r["time"]) if (self.main_timer-seg_r["start"])<seg_r["time"] else f"{(self.main_timer-seg_r['start']-seg_r['time']):+.1f}"
-                ) if (
-                len(self.latest_splits)!=len(self.split_times) and seg_r in curseg_cursors and seg_r["depth_ind"][0]+1 != len(curseg_cursors)
-                ) else formatB(right_time)
-            
-            slower_than_pb = seg_r["latest"] and (seg_r["latest"] > seg_r["time"])
-            right_fg = "white" if mid_timer is None else "gold" if seg_r["latest"] < seg_r["best"] else (
-                (
-                    "#80FF80" if slower_than_pb else "green"
-                ) if mid_timer < 0 else (
-                    "red" if slower_than_pb else "#FF8080"
+
+            left_text, mid_timer, right_time = seg_r["text"]
+            left.configure(text=f"{' ' * seg_r['depth_ind'][0]}{left_text}")
+
+            seg_in_cursors = seg_r in curseg_cursors
+
+            if mid_timer is None:
+                if not seg_in_cursors or not seg_r.get("time"):
+                    mid_text = ""
+                else:
+                    if (
+                        seg_r["depth_ind"][0] + 1 == len(curseg_cursors)
+                        and (
+                            (seg_r.get("time") and seg_r["text"][2] and self.main_timer > seg_r["text"][2])
+                            or (seg_r.get("best") and self.main_timer - seg_r["start"] > seg_r["best"])
+                        )
+                    ):
+                        mid_text = f"{(self.main_timer - seg_r['text'][2]):+.1f}"
+                    elif seg_in_cursors and seg_r != curseg_cursors[-1]:
+                        mid_text = formatA(self.main_timer - seg_r["start"])
+                    else: mid_text = ""
+            else:
+                mid_text = f"{mid_timer:+.1f}"
+
+            try:
+                if (
+                    len(self.latest_splits) != seg_count
+                    and seg_in_cursors
+                    and seg_r["depth_ind"][0] + 1 != len(curseg_cursors)
+                ):
+                    if seg_r.get("time") and (self.main_timer - seg_r["start"]) < seg_r["time"]:
+                        right_text = formatB(seg_r["time"])
+                    else:
+                        right_text = f"{(self.main_timer - seg_r['start'] - seg_r['time']):+.1f}"
+                else:
+                    right_text = formatB(right_time)
+            except Exception:
+                right_text = "-----"
+
+            slower_than_pb = (
+                seg_r["latest"] and seg_r["time"] and (seg_r["latest"] > seg_r["time"])
+            )
+            timer_fg = "white"
+            if mid_timer is not None:
+                timer_fg = (
+                "gold"
+                if (seg_r.get("best") and seg_r["latest"] < seg_r["best"])
+                else ("#80FF80" if slower_than_pb else "green")
+                if mid_timer < 0
+                else ("red" if slower_than_pb else "#FF8080")
                 )
+            mid_fg = not (seg_in_cursors and seg_r != curseg_cursors[-1])
+            if len(self.latest_splits) == seg_count:
+                start = seg_r["start"]
+                super_seg_timer = (
+                    None if not seg_r["time"] else self.main_timer - start - seg_r["time"]
                 )
-            #if random() < 0.001:
-            #    print(f"[test] {seg_r['depth_ind'][0]=}")
-            right.configure(text=f"{mid_text}   {right_text}",fg=right_fg)
-        
-    
-    def run(self):
+
+                if mid_fg:
+                    mid_text = "" if not mid_timer else f"{mid_timer:+.1f}"
+                    right_text = formatB(right_time or 0)
+                else:
+                    mid_text = formatA(self.main_timer - start)
+                    right_text = (
+                        "-----" if not super_seg_timer else f"{super_seg_timer:+.1f}"
+                    )
+                    if seg_r.get("time"):
+                        timer_fg = (
+                            "gold"
+                            if (seg_r.get("best") and self.main_timer - start < seg_r["best"])
+                            else "green"
+                            if super_seg_timer < 0
+                            else "red"
+                        )
+
+            middle.configure(text=mid_text, fg="white" if not mid_fg else timer_fg)
+            right.configure(text=right_text, fg="white" if mid_fg else timer_fg)
+
+    # -------------------------
+    # Run
+    # -------------------------
+
+    def run(self) -> None:
         self.w.mainloop()
-            
 
-app = App("Custom Livesplit v 3.0",
-          segment_names,
-          split_times=splits["PB"],
-          best_times = best_segments
-          )
-app.run()
 
-  
+# =========================
+# Data & App startup
+# =========================
+
+best_segments = [
+    [1583.29],
+    [
+        193.54,
+        359.66,
+        328.11,
+        204,
+        187.09,
+        265.26,
+    ],
+    [
+        37.15,
+        18.6,
+        43,
+        26,
+        63.14,
+        86.89,
+        18.9,
+        100.16,
+        28.25,
+        117.56,
+        76.73,
+        38.34,
+        63.31,
+        15,
+        131.56,
+        60.33,
+        33.5,
+        107.96,
+        52.75,
+        49.08,
+        82.58,
+        62.14,
+        64.30,
+        39.49,
+        80,
+    ],
+]
+
+splits = {
+    "PB": [
+        39.12,
+        59.29,
+        103.81,
+        131.97,
+        196.55,
+        283.79,
+        305.83,
+        417.4,
+        445.75,
+        575.63,
+        652.36,
+        690.7,
+        755.91,
+        772.18,
+        903.74,
+        968.23,
+        1007.81,
+        1130.12,
+        1182.87,
+        1235.31,
+        1317.89,
+        1380.03,
+        1448.97,
+        1489.01,
+        1583.29,
+    ]
+}
+
+segment_names = [
+    "--Akt 1",
+    "--Spezial 1",
+    "--Akt 2",
+    "--Spezial 2",
+    "-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
+    "--Akt 1: EIN ZYKLUS!",
+    "--Spezial 3: SPRING!",
+    "--Akt 2: Bitte nicht alle Ringe verlieren.",
+    "--Spezial 4",
+    "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
+    "--Akt 1: NOCH EIN ZYKLUS!",
+    "--Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
+    "--Akt 2: ETWAS HEIKLIG!",
+    "--Spezial 6: SPRING!!",
+    "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
+    "--Akt 1: Wasserphysik!",
+    "--Akt 2: Nützlicher Sprungfeder!",
+    "-♂🚿 00.11 Turnhalle-Umkleideraum [Akt=Waschbecken]|Akt 3: PARKOURZEIT!",
+    "--Akt 1: Sie schauen da ein guten Film",
+    "--Akt 2: Sie schauen sich gerade „Golden“ an.",
+    "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
+    "--📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
+    "--🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
+    "--🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
+    "Besiege den BOSS im ♀Klassenraum|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 BOSS [Kochnische(↑)]: WIEDER HEIKLIG!",
+]
+
+if __name__ == "__main__":
+    app = App(
+        segment_names,
+        split_times=splits["PB"],
+        best_segs=best_segments,
+        game_name="Sonic The Hedgehog Genesis (GBA - USA Version)",
+        run_category="[Tag 00135] Alle Smaragde im Jubiläumsmodus",
+    )
+    app.run()
