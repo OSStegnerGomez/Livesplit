@@ -23,7 +23,7 @@ def formatA(x: float | None) -> str:
     if x is None: return "-----.--"
     if x < 0:
         return f"-{formatA(-x)}"
-    return f"{x:.02f}".zfill(8)
+    return f"{x:08.2f}"
 
 
 def formatB(x: float) -> str:
