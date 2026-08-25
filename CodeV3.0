@@ -7,6 +7,7 @@ from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 import time
 import tkinter as tk
+from tkinter import ttk
 import keyboard
 
 
@@ -300,8 +301,13 @@ class App:
         self.seg_timer: float = 0.0
         self.stop: Optional[float] = None
 
+        # description
+
+        self.description = kwargs.get("description") or ""
+
         # tkinter
-        self.w = tk.Tk()
+        self.root = tk.Tk()
+
         self.setup_window()
         self.setup_labels()
         self.setup_hotkeys()
@@ -316,12 +322,22 @@ class App:
     # -------------------------
 
     def setup_window(self) -> None:
-        self.w.title("Custom Livesplit App v3.0.1 (Cleaned)")
-        self.w.geometry("450x450")
-        self.w.configure(bg="black")
-        self.w.option_add("*Background", "black")
-        self.w.option_add("*Foreground", "white")
-        self.w.resizable(False, False)
+        self.root.title("Custom Livesplit App v3.0.1 (Cleaned)")
+        self.root.geometry("450x450")
+        self.root.option_add("*Background", "black")
+        self.root.option_add("*Foreground", "white")
+        self.root.resizable(False, False)
+        self.note_book = ttk.Notebook(self.root)
+        self.note_book.pack(expand=True,fill="both")
+
+        style = ttk.Style()
+        style.configure("Custom.TFrame", background="black")
+
+        self.description_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
+        self.main_timer_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
+
+        self.note_book.add(self.description_tab, text="Beschreibung des Runs")
+        self.note_book.add(self.main_timer_tab, text="Haupt-Timer-Tab")
 
     # -------------------------
     # - Hotkeys
@@ -341,12 +357,16 @@ class App:
 
 
     def setup_labels(self) -> None:
+        # run description
+        self.description_label = tk.Label(self.description_tab,text=self.description,font=("Consolas", 8))
+        self.description_label.place(relx=0.5, rely=0.5,anchor="center")
+        
         # timers
-        self.main_timer_label = tk.Label(font=("Consolas", 25))
-        self.seg_timer_label = tk.Label(font=("Consolas", 15))
-        self.best_seg_labels = [tk.Label(font=("Consolas", 8)) for _ in range(3)]
-        self.pb_seg_labels = [tk.Label(font=("Consolas", 8)) for _ in range(3)]
-        self.bpt_label = tk.Label(font=("Consolas", 8))
+        self.main_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 25))
+        self.seg_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 15))
+        self.best_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
+        self.pb_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
+        self.bpt_label = tk.Label(self.main_timer_tab,font=("Consolas", 8))
 
         self.main_timer_label.place(relx=0.5, rely=0.82, anchor="center")
         self.seg_timer_label.place(relx=0.5, rely=0.88, anchor="center")
@@ -358,12 +378,12 @@ class App:
             label.place(relx=0, rely=0.8 + 0.08 * i)
 
         # segments
-        self.seg_backframes = [tk.Frame() for _ in range(11)]
-        self.game_name_label = tk.Label(text=self.game_name, font=("Consolas", 12))
-        self.run_category_label = tk.Label(text=self.run_category, font=("Consolas", 10))
-        self.left_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
-        self.middle_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
-        self.right_segment_labels = [tk.Label(font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.seg_backframes = [tk.Frame(self.main_timer_tab) for _ in range(11)]
+        self.game_name_label = tk.Label(self.main_timer_tab,text=self.game_name, font=("Consolas", 12))
+        self.run_category_label = tk.Label(self.main_timer_tab,text=self.run_category, font=("Consolas", 10))
+        self.left_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.middle_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.right_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
 
         for i, frame in enumerate(self.seg_backframes):
             frame.place(relwidth=1, height=21, y=i * 21 + 80)
@@ -514,7 +534,7 @@ class App:
         self.seg_timer = self.main_timer - (self.latest_splits[-1] if self.latest_splits else 0.0)
 
         self.update_labels()
-        self.w.after(10, self.update_loop)
+        self.root.after(10, self.update_loop)
 
     # -------------------------
     # Label updates
@@ -699,7 +719,7 @@ class App:
     # -------------------------
 
     def run(self) -> None:
-        self.w.mainloop()
+        self.root.mainloop()
 
 
 # =========================
@@ -791,9 +811,9 @@ segment_names = [
     "--Akt 2: ETWAS HEIKLIG!",
     "--Spezial 6: SPRING!!",
     "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
-    "--Akt 1: Wasserphysik!",
-    "--Akt 2: Nützlicher Sprungfeder!",
-    "-♂🚿 00.11 Turnhalle-Umkleideraum [Akt=Waschbecken]|Akt 3: PARKOURZEIT!",
+    "--Akt/Waschbecken 1: Wasserphysik!",
+    "--Akt/Waschbecken 2: Nützlicher Sprungfeder!",
+    "-♂🚿 00.11 Turnhalle-Umkleideraum|Akt/Waschbecken 3: PARKOURZEIT!",
     "--Akt 1: Sie schauen da ein guten Film",
     "--Akt 2: Sie schauen sich gerade „Golden“ an.",
     "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
@@ -809,6 +829,38 @@ if __name__ == "__main__":
         split_times=splits["PB"],
         best_segs=best_segments,
         game_name="Sonic The Hedgehog Genesis (GBA - USA Version)",
-        run_category="[Tag 00135] Alle Smaragde im Jubiläumsmodus",
+        run_category="[Tag 00136] Alle Smaragde im Jubiläumsmodus",
+        description="""
+Beschreibung des Durchlaufs:
+
+Spielversion: Schlechteste offizielle Portierung des Spiels
+Metascore: 33/100
+Anzahl der Zonen: 6 + 1 = 7
+Anzahl der vollständigen Räume: 5
+Raumnummern, Geschlecht und Bezeichnungen der Räume:
+- Für Zone 1 und 3: 00.08, weiblich, Schulsporthalle
+-- Zone 1 für normale Akte
+-- Zone 3 für 3 Hüpfburgen (jeder Akt entspricht einer Hüpfburg)
+- Für Zone 2: 00.25, männlich, Hauptküche
+- Für Zone 4: 00.11, männlich, Umkleideraum (zur Schulsporthalle)
+- Für Zone 5: 10.05, männlich, Gymnastikraum
+-- Dieser Raum wird wie ein Kinoraum behandelt
+- Für Zone 6 und 7: 10.28, weiblich, Klassenzimmer
+
+Anzahl der Spezial-Boxen: 6
+Frage: Wie gelangt man in diese Spezial-Boxen? 
+Antwort: Durch Hineinspringen in den riesigen Ring am Ende von
+Akt 1 und/oder 2, jeder Zone, bevor das Klassenzimmer erreicht wird
+Das gute Ende lässt sich erreichen,
+indem man den Boss im Klassenzimmer besiegt,
+nachdem alle 6 Spezial-Boxen erfolgreich absolviert wurden
+        
+Du kannst jeden Raum verwüsten,
+indem du darin so viele Monitore wie möglich zerstörst,
+ohne den Raum neu zu starten.
+
+Wenn du bemerkst, dass das Spiel ruckelt, bedeutet das,
+dass du den Atem eines weiblichen Raums spürst.
+        """
     )
     app.run()
