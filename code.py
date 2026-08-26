@@ -334,14 +334,16 @@ class App:
         style.configure("Custom.TFrame", background="black")
 
         self.description_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
-        self.description_pagebook = ttk.Notebook(self.note_book,style="Custom.TFrame")
-        self.description_pagebook.pack(pady=20,expand=True,fill="both")
+        self.description_pagebook = ttk.Notebook(self.description_tab,style="Custom.TFrame")
+        self.description_pagebook.pack(expand=True,fill="both")
         self.description_pages = [
             ttk.Frame(self.description_pagebook,style="Custom.TFrame") for e in self.description
         ]
         for i,page in enumerate(self.description_pages):
             self.description_pagebook.add(page,text=i+1)
-            description_lbl = tk.Label(page,text=self.description[i],font=("Consolas", 8))
+            description_lbl = tk.Label(
+                page,text=self.description[i],font=("Consolas", 8),wraplength=440
+                )
             description_lbl.place(relx=0.5, rely=0.5,anchor="center")
         
         self.main_timer_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
@@ -836,40 +838,67 @@ if __name__ == "__main__":
         split_times=splits["PB"],
         best_segs=best_segments,
         game_name="Sonic The Hedgehog Genesis (GBA - USA Version)",
-        run_category="[Tag 00136] Alle Smaragde im Jubiläumsmodus",
+        run_category="[Tag 00137] Alle Smaragde im Jubiläumsmodus",
         description=[
             """
-Beschreibung des Durchlaufs:
+Meine Beschreibung des Durchlaufs
+
 
 Spielversion: Schlechteste offizielle Portierung des Spiels
-Metascore: 33/100
 Anzahl der Zonen: 6 + 1 = 7
 Anzahl der vollständigen Räume: 5
-Raumnummern, Geschlecht und Namen der Räume:
-- Für Zone 1 und 3: 00.08, weiblich, Schulsporthalle
--- Zone 1 für normale Akte
--- Zone 3 für 3 Hüpfburgen (jeder Akt entspricht einer Hüpfburg)
-- Für Zone 2: 00.25, männlich, Hauptküche
-- Für Zone 4: 00.11, männlich, Umkleideraum (zur Schulsporthalle)
-- Für Zone 5: 10.05, männlich, Gymnastikraum
--- Dieser Raum wird wie ein Kinoraum behandelt
-- Für Zone 6 und 7: 10.28, weiblich, Klassenzimmer
+Raumnummern, Geschlecht und Namen dieser Räume:
+● 00.08 Turnhalle [weiblich]
+● 00.25 Hauptküche [männlich]
+● 00.11 Turnhalle-Umkleideraum [männlich]
+● 10.05 Gymnastikraum [männlich]
+● 10.28 Klassenraum [weiblich]
 
 Anzahl der Spezial-Boxen: 6
         ""","""
-Frage: Wie gelangt man in diese Spezial-Boxen? 
-Antwort: Durch Hineinspringen in den riesigen Ring am Ende von
-Akt 1 und/oder 2, jeder Zone, bevor das Klassenzimmer erreicht wird
-Das gute Ende lässt sich erreichen,
-indem man den Boss im Klassenzimmer besiegt,
-nachdem alle 6 Spezial-Boxen erfolgreich absolviert wurden
-        
-Du kannst jeden Raum verwüsten,
-indem du darin so viele Monitore wie möglich zerstörst,
-ohne den Raum neu zu starten.
+Ich beschreibe diesen Lauf folgendermaßen:
 
-Wenn du bemerkst, dass das Spiel ruckelt, bedeutet das,
-dass du den Atem eines weiblichen Raums spüren könntest.
+
+Die erste Zone befindet sich in der Turnhalle.
+Sie begrüßt den Held mit viel Bewegungsfreiheit.
+
+Nachdem er den Schlechten in der ersten Zone besiegt hat, füllt der Held ein großen Hunger, dass er nicht mehr aushalten kann.
+Die zweite Zone befindet sich in der Hauptküche.
+Er enthält drei Küchenzeilen, wobei jeder Akt eine Küchenzeile darstellt.
+Oh Nein! Der Held hat wahrscheinlich einen Fehler gemacht.
+Dort soll er versuchen die heiße Temperaturen auszuweichen.
+
+Der Held bekommt es nun mit der Hitze zu tun.
+Deshalb rennt er zurück in die Turnhalle – dort befindet sich auch die dritte Zone –, doch er ahnt nicht, dass die Lehrer geplant haben, sie zu verwandeln, indem sie drei Hüpfburgen in ihrem Inneren aufblasen, während er sich noch in der Hauptküche aufhält
+Nun muss er diese Hüpfburgen betreten. Jeder dortige Akt entspricht einer Hüpfburg.
+Sie haben sie von einem friedlichen Raum in einen potenziell bösen Ort verwandelt, der dem Helden womöglich üble Streiche spielt [z.B. mögliche unerwartete Todesstellen].
+""","""
+Da die Turnhalle nun eine bedrohliche Ausstrahlung hat, wird sie den Helden – nachdem er den Bösewicht in ihrem Inneren erneut besiegt hat – direkt in einer seiner Umkleideräume schicken; dort befindet sich die vierte Zone.
+In diesem Raum stehen drei Waschbecken, die der Held passieren muss, um in den nächsten Raum zu gelangen; dabei steht jedes der Waschbecken für einen der dortigen Akt.
+Jeder dieser drei Waschbecken sind mit Wasser gefüllt. Der Held kann den Atem nur 30 Sekunden lang anhalten, bevor er den Wassertod stirbt.
+
+Nachdem er aus dem Umkleideraum entkommen ist, betritt er einen friedlichen Raum, der Gymnastikraum. Hier befindet sich die fünfte Zone.
+Während sich der Held dort aufhält, schauen sich die Anwesenden gerade einen guten Film namens „KPop Demon Hunters“ an.
+""","""
+Nachdem er den Bösewicht im Gymnastikraum besiegt hat, betritt er das Klassenzimmer, in dem sich die letzten beiden Zonen befinden.
+
+Von außen wirkt sie unschuldig und gemütlich, doch sie birgt ihre eigenen Fallen, die dem Helden nach dem Leben trachten.
+
+Ab Akt 1 bemerkt der Held, dass die Leute in ihrem Inneren einen Film ansehen. Dieser Film enthält zahlreiche Geräusche von zerbrechendem Glas, die laut in ihr abgespielt werden.
+Ab Akt 2 bemerkt der Held, dass in ihrem Inneren auch gekocht wird – sie verfügt also über eine Kochnische. Er hält sich dabei nur im unteren Bereich dieser Kochnische auf.
+In Akt 3 überrascht sie den Helden, indem sie ihn in ein weiteres Waschbecken befördert.
+Nachdem der Held diesem Waschbecken entkommen ist, stellt er sich dem eigentlichen Bosskampf gegen sie. Der Held befindet sich immer noch im Klassenraum.
+
+Nachdem der Held den Boss in ihrem Inneren besiegt hat, kehrt er in die Turnhalle zurück (die wieder ihren Normalzustand angenommen hat), lässt die Steine ​​über sich schweben und vollführt anschließend einen Siegersprung.
+Damit endet die Geschichte.
+""","""
+Frage: Wie gelangt man in diese Spezial-Boxen? 
+Antwort: Durch Hineinspringen in den riesigen Ring am Ende von Akt 1 und/oder 2, jeder Zone [für männlich und weiblich], bevor das Klassenzimmer erreicht wird.
+Fakt: Das gute Ende lässt sich erreichen, indem man den Boss im Klassenzimmer besiegt, nachdem alle Spezial-Boxen erfolgreich absolviert wurden.
+        
+Du kannst jeden Raum verwüsten, indem du darin die höchstmögliche Anzahl von Glassachen [Monitoren] wie möglich zerstörst, ohne den Raum neu zu starten.
+
+Wenn du bemerkst, dass das Spiel ruckelt, bedeutet das, dass du den Atem eines weiblichen Raums spüren könntest.
         """
         ]
     )
