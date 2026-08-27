@@ -347,21 +347,23 @@ class App:
             description_lbl.place(relx=0.5, rely=0.5,anchor="center")
         
         self.main_timer_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
+        self.settings_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
 
-        self.note_book.add(self.description_tab, text="Beschreibung des Runs")
-        self.note_book.add(self.main_timer_tab, text="Haupt-Timer-Tab")
+        self.note_book.add(self.description_tab, text="Beschreibung")
+        self.note_book.add(self.main_timer_tab, text="Haupt-Tab")
+        self.note_book.add(self.settings_tab, text="Einstellungen")
 
     # -------------------------
     # - Hotkeys
     # -------------------------
 
     def setup_hotkeys(self) -> None:
-        keyboard.add_hotkey("z", lambda: self.read_instruction("START"))
-        keyboard.add_hotkey("x", lambda: self.read_instruction("HELLO!"))
-        keyboard.add_hotkey("shift + q", lambda: self.read_instruction("PAUSE"))
-        keyboard.add_hotkey("s", lambda: self.read_instruction("SPLIT"))
-        keyboard.add_hotkey("shift + s", lambda: self.read_instruction("DESPLIT"))
-        keyboard.add_hotkey("ctrl + shift + q", lambda: self.read_instruction("RESET"))
+            keyboard.add_hotkey("z", lambda: self.read_instruction("START"))
+            keyboard.add_hotkey("x", lambda: self.read_instruction("HELLO!"))
+            keyboard.add_hotkey("shift + q", lambda: self.read_instruction("PAUSE"))
+            keyboard.add_hotkey("s", lambda: self.read_instruction("SPLIT"))
+            keyboard.add_hotkey("shift + s", lambda: self.read_instruction("DESPLIT"))
+            keyboard.add_hotkey("ctrl + shift + q", lambda: self.read_instruction("RESET"))
 
     # -------------------------
     # - Labels
@@ -373,8 +375,8 @@ class App:
         # timers
         self.main_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 25))
         self.seg_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 15))
-        self.best_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
-        self.pb_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
+        self.best_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(2)]
+        self.pb_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(2)]
         self.bpt_label = tk.Label(self.main_timer_tab,font=("Consolas", 8))
 
         self.main_timer_label.place(relx=0.5, rely=0.82, anchor="center")
@@ -411,6 +413,8 @@ class App:
     # -------------------------
 
     def read_instruction(self, cmd: str) -> None:
+        cur_tab = self.note_book.index("current")
+        if cur_tab != 1: return False
         match cmd:
             case "START":
                 self._start_main_timer()
@@ -467,6 +471,27 @@ class App:
             return False
 
         self.latest_splits.append(self.main_timer)
+
+        seg_repr = seg_list_repr(
+        self.seg_info_cache["final_list"],
+        compare_to=self.split_times,
+        split_times=self.latest_splits,
+        best_segs=self.best_segs,
+        )
+
+        seg_cursors = [
+                next(
+                    (e for e in seg_repr if e["range"][1] == self.curseg and e["depth_ind"][0] == i),
+                    None,
+                )
+                for i in range(len(self.best_seg_labels))
+            ]
+        for seg in [e for e in seg_cursors if e is not None]:
+            d = seg["depth_ind"]
+            if seg["best"] is None or (seg["latest"] is not None and seg["latest"] < seg["best"]):
+                print(
+                 f"Got a new best time on the {ordinal_num(d[1]+1)} Depth {d[0]} segment with a time of {seg['latest']:08.2f}"
+                )
         self.bpt_label.configure(text=f"Best Possible Time: {formatA(self.get_bpt())}")
         if len(self.latest_splits) == self.seg_count:
             self._pause_main_timer()
@@ -736,7 +761,6 @@ class App:
 # =========================
 
 best_segments = [
-    [1583.29],
     [
         193.54,
         359.66,
@@ -753,7 +777,7 @@ best_segments = [
         63.14,
         86.89,
         18.9,
-        100.16,
+        94.90,
         28.25,
         117.56,
         76.73,
@@ -805,31 +829,31 @@ splits = {
 }
 
 segment_names = [
-    "--Akt 1",
-    "--Spezial 1",
-    "--Akt 2",
-    "--Spezial 2",
-    "-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
-    "--Akt 1: EIN ZYKLUS!",
-    "--Spezial 3: SPRING!",
-    "--Akt 2: Bitte nicht alle Ringe verlieren.",
-    "--Spezial 4",
-    "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
-    "--Akt 1: NOCH EIN ZYKLUS!",
-    "--Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
-    "--Akt 2: ETWAS HEIKLIG!",
-    "--Spezial 6: SPRING!!",
-    "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
-    "--Akt/Waschbecken 1: Wasserphysik!",
-    "--Akt/Waschbecken 2: Nützlicher Sprungfeder!",
-    "-♂🚿 00.11 Turnhalle-Umkleideraum|Akt/Waschbecken 3: PARKOURZEIT!",
-    "--Akt 1: Sie schauen da ein guten Film",
-    "--Akt 2: Sie schauen sich gerade „Golden“ an.",
-    "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
-    "--📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
-    "--🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
-    "--🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
-    "Besiege den BOSS im ♀Klassenraum|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 BOSS [Kochnische(↑)]: WIEDER HEIKLIG!",
+    "-Akt 1",
+    "-Spezial 1",
+    "-Akt 2",
+    "-Spezial 2",
+    "♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
+    "-Akt 1: EIN ZYKLUS!",
+    "-Spezial 3: SPRING!",
+    "-Akt 2: Bitte nicht alle Ringe verlieren.",
+    "-Spezial 4",
+    "♂🍳 00.25 Hauptküche der Schule|Akt 3",
+    "-Akt 1: NOCH EIN ZYKLUS!",
+    "-Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
+    "-Akt 2: ETWAS HEIKLIG!",
+    "-Spezial 6: SPRING!!",
+    "♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
+    "-Akt/Waschbecken 1: Wasserphysik!",
+    "-Akt/Waschbecken 2: Nützlicher Sprungfeder!",
+    "♂🚿 00.11 Turnhalle-Umkleideraum|Akt/Waschbecken 3: PARKOURZEIT!",
+    "-Akt 1: Sie schauen da ein guten Film",
+    "-Akt 2: Sie schauen sich gerade „Golden“ an.",
+    "♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
+    "-📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
+    "-🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
+    "-🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
+    "♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 BOSS [Kochnische(↑)]: WIEDER HEIKLIG!",
 ]
 
 if __name__ == "__main__":
@@ -838,13 +862,18 @@ if __name__ == "__main__":
         split_times=splits["PB"],
         best_segs=best_segments,
         game_name="Sonic The Hedgehog Genesis (GBA - USA Version)",
-        run_category="[Tag 00137] Alle Smaragde im Jubiläumsmodus",
+        run_category="[Tag 00138] Alle Smaragde im Jubiläumsmodus",
         description=[
             """
 Meine Beschreibung des Durchlaufs
 
 
 Spielversion: Schlechteste offizielle Portierung des Spiels
+-> Sie haben erwartet, dass diese Spielportierung gut wird.
+-> Eine Katastrophe, mit der sie nicht gerechnet hatten.
+-> Diese Portierung basiert sich auf eine andere Portierung.
+-> Das eigentliche Spiel hat nix mit Horror zu tun.
+Metascore: 33/100
 Anzahl der Zonen: 6 + 1 = 7
 Anzahl der vollständigen Räume: 5
 Raumnummern, Geschlecht und Namen dieser Räume:
@@ -853,6 +882,9 @@ Raumnummern, Geschlecht und Namen dieser Räume:
 ● 00.11 Turnhalle-Umkleideraum [männlich]
 ● 10.05 Gymnastikraum [männlich]
 ● 10.28 Klassenraum [weiblich]
+
+Spielreihenfolge der angegebenen Räume:
+● Turnhalle (Normal) -> Hauptküche -> Turnhalle (Hüpfburgen) -> Turnhalle-Umkleideraum -> Gymnastikraum -> Klassenraum -> Klassenraum (BOSS)
 
 Anzahl der Spezial-Boxen: 6
         ""","""
@@ -880,23 +912,26 @@ Jeder dieser drei Waschbecken sind mit Wasser gefüllt. Der Held kann den Atem n
 Nachdem er aus dem Umkleideraum entkommen ist, betritt er einen friedlichen Raum, der Gymnastikraum. Hier befindet sich die fünfte Zone.
 Während sich der Held dort aufhält, schauen sich die Anwesenden gerade einen guten Film namens „KPop Demon Hunters“ an.
 ""","""
-Nachdem er den Bösewicht im Gymnastikraum besiegt hat, betritt er das Klassenzimmer, in dem sich die letzten beiden Zonen befinden.
+Nachdem er den Bösewicht im Gymnastikraum besiegt hat, erreicht er das Klassenzimmer, in dem sich die letzten beiden Zonen befinden.
 
-Von außen wirkt sie unschuldig und gemütlich, doch sie birgt ihre eigenen Fallen, die dem Helden nach dem Leben trachten.
+Von außen wirkt sie unschuldig und von innen gemütlich, doch sie birgt ihre eigenen Fallen, die dem Helden nach dem Leben trachten.
 
-Ab Akt 1 bemerkt der Held, dass die Leute in ihrem Inneren einen Film ansehen. Dieser Film enthält zahlreiche Geräusche von zerbrechendem Glas, die laut in ihr abgespielt werden.
-Ab Akt 2 bemerkt der Held, dass in ihrem Inneren auch gekocht wird – sie verfügt also über eine Kochnische. Er hält sich dabei nur im unteren Bereich dieser Kochnische auf.
+In Akt 1 bemerkt der Held, dass die Leute in ihrem Inneren einen Film ansehen. Dieser Film enthält zahlreiche Geräusche von zerbrechendem Glas, die laut in ihr abgespielt werden.
+In Akt 2 bemerkt der Held, dass in ihrem Inneren auch gekocht wird – sie verfügt also über eine Kochnische. Er befindet sich dort im unteren Bereich dieser Kochnische auf.
 In Akt 3 überrascht sie den Helden, indem sie ihn in ein weiteres Waschbecken befördert.
-Nachdem der Held diesem Waschbecken entkommen ist, stellt er sich dem eigentlichen Bosskampf gegen sie. Der Held befindet sich immer noch im Klassenraum.
+Nachdem der Held diesem Waschbecken entkommen ist, stellt er sich dem eigentlichen Bosskampf gegen sie.
+Der Held befindet sich immer noch im Klassenraum.  Er befindet sich dort im oberen Bereich seiner Kochnische auf.
 
-Nachdem der Held den Boss in ihrem Inneren besiegt hat, kehrt er in die Turnhalle zurück (die wieder ihren Normalzustand angenommen hat), lässt die Steine ​​über sich schweben und vollführt anschließend einen Siegersprung.
+Nachdem der Held den Boss in ihrem Inneren besiegt hat, kehrt er in die Turnhalle [dort wird eine Abschlussfeier gefeiert] zurück (die wieder ihren Normalzustand angenommen hat), lässt die Steine ​​über sich schweben und vollführt anschließend einen Siegersprung.
 Damit endet die Geschichte.
 ""","""
 Frage: Wie gelangt man in diese Spezial-Boxen? 
-Antwort: Durch Hineinspringen in den riesigen Ring am Ende von Akt 1 und/oder 2, jeder Zone [für männlich und weiblich], bevor das Klassenzimmer erreicht wird.
+Antwort: Durch Hineinspringen in den riesigen Ring am Ende von Akt 1 und/oder 2, jeder Zone [für männlich und weiblich], wenn du mindestens 50 Einheiten einer Währung hast, bevor du das Klassenzimmer erreichts.
 Fakt: Das gute Ende lässt sich erreichen, indem man den Boss im Klassenzimmer besiegt, nachdem alle Spezial-Boxen erfolgreich absolviert wurden.
         
-Du kannst jeden Raum verwüsten, indem du darin die höchstmögliche Anzahl von Glassachen [Monitoren] wie möglich zerstörst, ohne den Raum neu zu starten.
+Wenn du im eigentlichen Spiel Glas zerbrichst, zerbrichst du auch Glas in dem entsprechenden Raum (basierend auf der jeweiligen Zone).
+Du kannst einen Raum komplett verwüsten, wenn du „jedes einzelne“ Glasobjekt in der/den entsprechenden Zone(n) (gemäß Beschreibung) zerbrichst.
+Besonderheit: Im vollständigen Spieldurchlauf kannst du die Turnhalle tatsächlich zweimal verwüsten.
 
 Wenn du bemerkst, dass das Spiel ruckelt, bedeutet das, dass du den Atem eines weiblichen Raums spüren könntest.
         """
