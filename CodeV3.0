@@ -9,7 +9,8 @@ import time
 import tkinter as tk
 from tkinter import ttk
 import keyboard
-
+import json
+from base64 import b64encode, b64decode
 
 # =========================
 # Utility functions
@@ -277,23 +278,23 @@ class App:
     TIMER_SPEED = 1
     SEG_ROW_COUNT = 11
     
-    def __init__(self, seg_names: Sequence[str] = (), **kwargs: Any) -> None:
+    def __init__(self) -> None:
         # control
         self.curseg: int = 0
-        self.seg_names: List[str] = list(seg_names)
+        self.seg_names: List[str] = ["NEU"]
         self.seg_order: List[List[Any]] = segment_order(self.seg_names)
         self.seg_count: int = len(self.seg_names)
 
-        self.best_segs: List[List[float]] = kwargs.get("best_segs") or []
-        self.split_times: List[float] = kwargs.get("split_times") or []
+        self.best_segs: List[List[float]] = []
+        self.split_times: List[float] = []
         self.latest_splits: List[float] = []
 
         self.seg_info_cache: dict = get_seg_list_info(
             self.seg_order, curseg=self.curseg + 1
         )
 
-        self.game_name: str = kwargs.get("game_name") or ""
-        self.run_category: str = kwargs.get("run_category") or ""
+        self.game_name: str = ""
+        self.run_category: str = ""
 
         # timing
         self.main_timer: float = 0.0
@@ -303,12 +304,13 @@ class App:
 
         # description
 
-        self.description = kwargs.get("description") or ""
+        self.description = ["Hier können sie eure Bescreibung geben."]
 
         # tkinter
         self.root = tk.Tk()
 
         self.setup_window()
+        self.create_labels()
         self.setup_labels()
         self.setup_hotkeys()
         self.update_loop()
@@ -333,41 +335,81 @@ class App:
         style = ttk.Style()
         style.configure("Custom.TFrame", background="black")
 
-        self.description_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
         self.main_timer_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
+        self.settings_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
+        self.description_tab = ttk.Frame(self.note_book,style="Custom.TFrame")
 
-        self.note_book.add(self.description_tab, text="Beschreibung des Runs")
-        self.note_book.add(self.main_timer_tab, text="Haupt-Timer-Tab")
+        self.note_book.add(self.description_tab, text="Beschreibung")
+        self.note_book.add(self.main_timer_tab, text="Haupt-Tab")
+        self.note_book.add(self.settings_tab, text="Einstellungen")
+        self.setup_description_tab()
 
+
+    def setup_description_tab(self) -> None:
+        self.description_pagebook = ttk.Notebook(self.description_tab,style="Custom.TFrame")
+        self.description_pagebook.pack(expand=True,fill="both")
+        self.description_pages = [
+            ttk.Frame(self.description_pagebook,style="Custom.TFrame") for e in self.description
+        ]
+        for i,page in enumerate(self.description_pages):
+            self.description_pagebook.add(page,text=i+1)
+            description_lbl = tk.Label(
+                page,text=self.description[i],font=("Consolas", 8),wraplength=440
+                )
+            description_lbl.place(relx=0.5, rely=0.5,anchor="center")
+        
     # -------------------------
     # - Hotkeys
     # -------------------------
 
     def setup_hotkeys(self) -> None:
-        keyboard.add_hotkey("z", lambda: self.read_instruction("START"))
-        keyboard.add_hotkey("x", lambda: self.read_instruction("HELLO!"))
-        keyboard.add_hotkey("shift + q", lambda: self.read_instruction("PAUSE"))
-        keyboard.add_hotkey("s", lambda: self.read_instruction("SPLIT"))
-        keyboard.add_hotkey("shift + s", lambda: self.read_instruction("DESPLIT"))
-        keyboard.add_hotkey("ctrl + shift + q", lambda: self.read_instruction("RESET"))
+            keyboard.add_hotkey("z", lambda: self.read_instruction("START"))
+            keyboard.add_hotkey("x", lambda: self.read_instruction("HELLO!"))
+            keyboard.add_hotkey("shift + q", lambda: self.read_instruction("PAUSE"))
+            keyboard.add_hotkey("s", lambda: self.read_instruction("SPLIT"))
+            keyboard.add_hotkey("shift + s", lambda: self.read_instruction("DESPLIT"))
+            keyboard.add_hotkey("ctrl + shift + q", lambda: self.read_instruction("RESET"))
 
     # -------------------------
     # - Labels
     # -------------------------
 
-
-    def setup_labels(self) -> None:
-        # run description
-        self.description_label = tk.Label(self.description_tab,text=self.description,font=("Consolas", 8))
-        self.description_label.place(relx=0.5, rely=0.5,anchor="center")
+    def create_labels(self) -> None:
+        # settings
+        self.export_btn = tk.Button(
+            self.settings_tab,text="Exportieren",font=("Consolas", 10),command=self.export_data
+            )
+        self.import_btn = tk.Button(
+            self.settings_tab,text="Importieren",font=("Consolas", 10),command=self.import_data
+            )
+        self.export_text = tk.Text(
+            self.settings_tab,font=("Consolas", 10)
+        )
         
-        # timers
+        self.game_name_label = tk.Label(self.main_timer_tab, font=("Consolas", 12))
+        self.run_category_label = tk.Label(self.main_timer_tab, font=("Consolas", 10))
+
         self.main_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 25))
         self.seg_timer_label = tk.Label(self.main_timer_tab,font=("Consolas", 15))
-        self.best_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
-        self.pb_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(3)]
+        self.best_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(2)]
+        self.pb_seg_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 8)) for _ in range(2)]
         self.bpt_label = tk.Label(self.main_timer_tab,font=("Consolas", 8))
 
+        self.seg_backframes = [tk.Frame(self.main_timer_tab) for _ in range(11)]
+        self.left_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.middle_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+        self.right_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
+
+
+
+    def setup_labels(self) -> None:
+
+        # settings
+        self.export_btn.place(relx=0.35,rely=0.1,anchor="center")
+        self.import_btn.place(relx=0.65,rely=0.1,anchor="center")
+        self.export_text.place(relx=0,rely=0.2,width=400,height=300)
+        
+        # timers
         self.main_timer_label.place(relx=0.5, rely=0.82, anchor="center")
         self.seg_timer_label.place(relx=0.5, rely=0.88, anchor="center")
         self.bpt_label.place(relx=0.5, rely=0.92, anchor="center")
@@ -378,13 +420,6 @@ class App:
             label.place(relx=0, rely=0.8 + 0.08 * i)
 
         # segments
-        self.seg_backframes = [tk.Frame(self.main_timer_tab) for _ in range(11)]
-        self.game_name_label = tk.Label(self.main_timer_tab,text=self.game_name, font=("Consolas", 12))
-        self.run_category_label = tk.Label(self.main_timer_tab,text=self.run_category, font=("Consolas", 10))
-        self.left_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
-        self.middle_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
-        self.right_segment_labels = [tk.Label(self.main_timer_tab,font=("Consolas", 10)) for _ in range(App.SEG_ROW_COUNT)]
-
         for i, frame in enumerate(self.seg_backframes):
             frame.place(relwidth=1, height=21, y=i * 21 + 80)
         for i, label in enumerate(self.left_segment_labels):
@@ -401,7 +436,76 @@ class App:
     # Commands
     # -------------------------
 
+    def export_data(self):
+
+        json_str = json.dumps({
+            "Stoppuhr": self.main_timer,
+            "Zwischenzeiten": self.split_times,
+            "Aktuelle Zwischenzeiten": self.latest_splits,
+            "Beste Segmente": self.best_segs,
+            "Spielname": self.game_name,
+            "Durchlaufkategorie": self.run_category,
+            "Segmentnamen": self.seg_names,
+            "Beschreibung": self.description,
+            })
+        json_bytes = json_str.encode("utf-8")
+
+        b64_bytes = b64encode(json_bytes)
+
+        data = b64_bytes.decode("utf-8")
+        
+        self.export_text.delete("1.0", tk.END)
+        self.export_text.insert("1.0", data)
+
+    def import_data(self):
+        b64_bytes = self.export_text.get("1.0", "end-1c").encode("utf-8")
+        json_bytes = b64decode(b64_bytes)
+        json_str = json_bytes.decode("utf-8")
+        try:
+            kwargs = json.loads(json_str)
+            # control
+            self.curseg: int = 0
+            self.seg_names: List[str] = list(kwargs.get("Segmentnamen"))
+            self.seg_order: List[List[Any]] = segment_order(self.seg_names)
+            self.seg_count: int = len(self.seg_names)
+
+            self.best_segs: List[List[float]] = kwargs.get("Beste Segmente") or []
+            self.split_times: List[float] = kwargs.get("Zwischenzeiten") or []
+            self.latest_splits: List[float] = kwargs.get("Aktuelle Zwischenzeiten") or []
+
+            self.seg_info_cache: dict = get_seg_list_info(
+                self.seg_order, curseg=self.curseg + 1
+            )
+
+            self.game_name: str = kwargs.get("Spielname") or ""
+            self.run_category: str = kwargs.get("Durchlaufkategorie") or ""
+
+            # timing
+            self.main_timer: float = kwargs.get("Stoppuhr") or 0.0
+            self.start: Optional[float] = None
+            self.seg_timer: float = 0.0
+            self.stop: Optional[float] = None
+
+            # description
+
+            self.description = kwargs.get("Beschreibung") or ["Hier können sie eure bescreibung eingeben."]
+
+            if type(self.description) is not list:
+                self.description = [f"Der Datentyp aus Ihrer Beschreibung ist ungültig.\n -> Erwartet: „{list}“, erhalten: „{type(self.description)}“"]
+
+            self.description_pagebook.destroy()
+            self.setup_description_tab()
+            print("Erfolgreich importiert!")
+
+            self.game_name_label.configure(text=self.game_name)
+            self.run_category_label.configure(text=self.run_category)
+        except Exception as e:
+            print("Fehler beim Importieren\n->",e)
+        
+
     def read_instruction(self, cmd: str) -> None:
+        cur_tab = self.note_book.index("current")
+        if cur_tab != 1: return False
         match cmd:
             case "START":
                 self._start_main_timer()
@@ -458,6 +562,27 @@ class App:
             return False
 
         self.latest_splits.append(self.main_timer)
+
+        seg_repr = seg_list_repr(
+        self.seg_info_cache["final_list"],
+        compare_to=self.split_times,
+        split_times=self.latest_splits,
+        best_segs=self.best_segs,
+        )
+
+        seg_cursors = [
+                next(
+                    (e for e in seg_repr if e["range"][1] == self.curseg and e["depth_ind"][0] == i),
+                    None,
+                )
+                for i in range(len(self.best_seg_labels))
+            ]
+        for seg in [e for e in seg_cursors if e is not None]:
+            d = seg["depth_ind"]
+            if seg["best"] is None or (seg["latest"] is not None and seg["latest"] < seg["best"]):
+                print(
+                 f"Got a new best time on the {ordinal_num(d[1]+1)} Depth {d[0]} segment with a time of {seg['latest']:08.2f}"
+                )
         self.bpt_label.configure(text=f"Best Possible Time: {formatA(self.get_bpt())}")
         if len(self.latest_splits) == self.seg_count:
             self._pause_main_timer()
@@ -723,144 +848,28 @@ class App:
 
 
 # =========================
-# Data & App startup
+# App startup
 # =========================
 
-best_segments = [
-    [1583.29],
-    [
-        193.54,
-        359.66,
-        328.11,
-        204,
-        187.09,
-        265.26,
-    ],
-    [
-        37.15,
-        18.6,
-        43,
-        26,
-        63.14,
-        86.89,
-        18.9,
-        100.16,
-        28.25,
-        117.56,
-        76.73,
-        38.34,
-        63.31,
-        15,
-        131.56,
-        60.33,
-        33.5,
-        107.96,
-        52.75,
-        49.08,
-        82.58,
-        62.14,
-        64.30,
-        39.49,
-        80,
-    ],
-]
-
-splits = {
-    "PB": [
-        39.12,
-        59.29,
-        103.81,
-        131.97,
-        196.55,
-        283.79,
-        305.83,
-        417.4,
-        445.75,
-        575.63,
-        652.36,
-        690.7,
-        755.91,
-        772.18,
-        903.74,
-        968.23,
-        1007.81,
-        1130.12,
-        1182.87,
-        1235.31,
-        1317.89,
-        1380.03,
-        1448.97,
-        1489.01,
-        1583.29,
-    ]
-}
-
-segment_names = [
-    "--Akt 1",
-    "--Spezial 1",
-    "--Akt 2",
-    "--Spezial 2",
-    "-♀🏀 00.08 *RESET-*Turnhalle [Normal]|Akt 3",
-    "--Akt 1: EIN ZYKLUS!",
-    "--Spezial 3: SPRING!",
-    "--Akt 2: Bitte nicht alle Ringe verlieren.",
-    "--Spezial 4",
-    "-♂🍳 00.25 Hauptküche der Schule|Akt 3",
-    "--Akt 1: NOCH EIN ZYKLUS!",
-    "--Spezial 5: MEINE GRÖSSTE SCHWÄCHE DORT!",
-    "--Akt 2: ETWAS HEIKLIG!",
-    "--Spezial 6: SPRING!!",
-    "-♀🏰 00.08 Turnhalle [Akt=Hüpfburg]|Akt 3: HEIKLIG AM ANFANG!",
-    "--Akt/Waschbecken 1: Wasserphysik!",
-    "--Akt/Waschbecken 2: Nützlicher Sprungfeder!",
-    "-♂🚿 00.11 Turnhalle-Umkleideraum|Akt/Waschbecken 3: PARKOURZEIT!",
-    "--Akt 1: Sie schauen da ein guten Film",
-    "--Akt 2: Sie schauen sich gerade „Golden“ an.",
-    "-♂🎬 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters",
-    "--📍 Akt 1 [Raummitte]: Da wird auch Film geschaut!",
-    "--🍳 Akt 2 [Kochnische(↓)]: Da wird gekocht!",
-    "--🚰 Akt 3 [Waschbecken]: So hygienisch schlau!",
-    "Besiege den BOSS im ♀Klassenraum|♀🎒 10.28 Klassenraum [Sehusaschule]|🍽 BOSS [Kochnische(↑)]: WIEDER HEIKLIG!",
-]
-
 if __name__ == "__main__":
-    app = App(
-        segment_names,
-        split_times=splits["PB"],
-        best_segs=best_segments,
-        game_name="Sonic The Hedgehog Genesis (GBA - USA Version)",
-        run_category="[Tag 00136] Alle Smaragde im Jubiläumsmodus",
-        description="""
-Beschreibung des Durchlaufs:
-
-Spielversion: Schlechteste offizielle Portierung des Spiels
-Metascore: 33/100
-Anzahl der Zonen: 6 + 1 = 7
-Anzahl der vollständigen Räume: 5
-Raumnummern, Geschlecht und Bezeichnungen der Räume:
-- Für Zone 1 und 3: 00.08, weiblich, Schulsporthalle
--- Zone 1 für normale Akte
--- Zone 3 für 3 Hüpfburgen (jeder Akt entspricht einer Hüpfburg)
-- Für Zone 2: 00.25, männlich, Hauptküche
-- Für Zone 4: 00.11, männlich, Umkleideraum (zur Schulsporthalle)
-- Für Zone 5: 10.05, männlich, Gymnastikraum
--- Dieser Raum wird wie ein Kinoraum behandelt
-- Für Zone 6 und 7: 10.28, weiblich, Klassenzimmer
-
-Anzahl der Spezial-Boxen: 6
-Frage: Wie gelangt man in diese Spezial-Boxen? 
-Antwort: Durch Hineinspringen in den riesigen Ring am Ende von
-Akt 1 und/oder 2, jeder Zone, bevor das Klassenzimmer erreicht wird
-Das gute Ende lässt sich erreichen,
-indem man den Boss im Klassenzimmer besiegt,
-nachdem alle 6 Spezial-Boxen erfolgreich absolviert wurden
-        
-Du kannst jeden Raum verwüsten,
-indem du darin so viele Monitore wie möglich zerstörst,
-ohne den Raum neu zu starten.
-
-Wenn du bemerkst, dass das Spiel ruckelt, bedeutet das,
-dass du den Atem eines weiblichen Raums spürst.
-        """
-    )
+    app = App()
     app.run()
+
+
+"""
+{"Stoppuhr": 0.0, "Zwischenzeiten": [39.12, 59.29, 103.81, 131.97, 196.55, 283.79, 305.83, 417.4, 445.75, 575.63, 652.36, 690.7, 755.91, 772.18, 903.74, 968.23, 1007.81, 1130.12, 1182.87, 1235.31, 1317.89, 1380.03, 1448.97, 1489.01, 1583.29], "Aktuelle Zwischenzeiten": [], "Beste Segmente": [[193.54, 359.66, 328.11, 204, 187.09, 265.26], [37.15, 18.6, 43, 26, 63.14, 86.89, 18.9, 94.9, 28.25, 117.56, 76.73, 38.34, 63.31, 15, 131.56, 60.33, 33.5, 107.96, 52.75, 49.08, 82.58, 62.14, 64.3, 39.49, 80], [], [], [], [], [], [], [], []], "Spielname": "Sonic The Hedgehog Genesis (GBA - USA Version)", "Durchlaufkategorie": "[Tag 00138] Alle Smaragde im Jubil\u00e4umsmodus", "Segmentnamen": ["-Akt 1", "-Spezial 1", "-Akt 2", "-Spezial 2", "\u2640\ud83c\udfc0 00.08 *RESET-*Turnhalle [Normal]|Akt 3", "-Akt 1: EIN ZYKLUS!", "-Spezial 3: SPRING!", "-Akt 2: Bitte nicht alle Ringe verlieren.", "-Spezial 4", "\u2642\ud83c\udf73 00.25 Hauptk\u00fcche der Schule|Akt 3", "-Akt 1: NOCH EIN ZYKLUS!", "-Spezial 5: MEINE GR\u00d6SSTE SCHW\u00c4CHE DORT!", "-Akt 2: ETWAS HEIKLIG!", "-Spezial 6: SPRING!!", "\u2640\ud83c\udff0 00.08 Turnhalle [Akt=H\u00fcpfburg]|Akt 3: HEIKLIG AM ANFANG!", "-Akt/Waschbecken 1: Wasserphysik!", "-Akt/Waschbecken 2: N\u00fctzlicher Sprungfeder!", "\u2642\ud83d\udebf 00.11 Turnhalle-Umkleideraum|Akt/Waschbecken 3: PARKOURZEIT!", "-Akt 1: Sie schauen da ein guten Film", "-Akt 2: Sie schauen sich gerade \u201eGolden\u201c an.", "\u2642\ud83c\udfac 10.05 Gymnastikraum [Kinoraum]|Akt 3: Dieser Film: KPop Demon Hunters", "-\ud83d\udccd Akt 1 [Raummitte]: Da wird auch Film geschaut!", "-\ud83c\udf73 Akt 2 [Kochnische(\u2193)]: Da wird gekocht!", "-\ud83d\udeb0 Akt 3 [Waschbecken]: So hygienisch schlau!", "\u2640\ud83c\udf92 10.28 Klassenraum [Sehusaschule]|\ud83c\udf7d BOSS [Kochnische(\u2191)]: WIEDER HEIKLIG!"], "Beschreibung": ["\nMeine Beschreibung des Durchlaufs\n\n\nSpielversion: Schlechteste offizielle Portierung des Spiels\n-> Sie haben erwartet, dass diese Spielportierung gut wird.\n-> Eine Katastrophe, mit der sie nicht gerechnet hatten.\n-> Diese Portierung basiert sich auf eine andere Portierung.\n-> Das eigentliche Spiel hat nix mit Horror zu tun.\nMetascore: 33/100\nAnzahl der Zonen: 6 + 1 = 7\nAnzahl der vollst\u00e4ndigen R\u00e4ume: 5\nRaumnummern, Geschlecht und Namen dieser R\u00e4ume:\n\u25cf 00.08 Turnhalle [weiblich]\n\u25cf 00.25 Hauptk\u00fcche [m\u00e4nnlich]\n\u25cf 00.11 Turnhalle-Umkleideraum [m\u00e4nnlich]\n\u25cf 10.05 Gymnastikraum [m\u00e4nnlich]\n\u25cf 10.28 Klassenraum [weiblich]\n\nSpielreihenfolge der angegebenen R\u00e4ume:\n\u25cf Turnhalle (Normal) -> Hauptk\u00fcche -> Turnhalle (H\u00fcpfburgen) -> Turnhalle-Umkleideraum -> Gymnastikraum -> Klassenraum -> Klassenraum (BOSS)\n\nAnzahl der Spezial-Boxen: 6\n        ", "\nIch beschreibe diesen Lauf folgenderma\u00dfen:\n\n\nDie erste Zone befindet sich in der Turnhalle.\nSie begr\u00fc\u00dft den Held mit viel Bewegungsfreiheit.\n\nNachdem er den Schlechten in der ersten Zone besiegt hat, f\u00fcllt der Held ein gro\u00dfen Hunger, dass er nicht mehr aushalten kann.\nDie zweite Zone befindet sich in der Hauptk\u00fcche.\nEr enth\u00e4lt drei K\u00fcchenzeilen, wobei jeder Akt eine K\u00fcchenzeile darstellt.\nOh Nein! Der Held hat wahrscheinlich einen Fehler gemacht.\nDort soll er versuchen die hei\u00dfe Temperaturen auszuweichen.\n\nDer Held bekommt es nun mit der Hitze zu tun.\nDeshalb rennt er zur\u00fcck in die Turnhalle \u2013 dort befindet sich auch die dritte Zone \u2013, doch er ahnt nicht, dass die Lehrer geplant haben, sie zu verwandeln, indem sie drei H\u00fcpfburgen in ihrem Inneren aufblasen, w\u00e4hrend er sich noch in der Hauptk\u00fcche aufh\u00e4lt\nNun muss er diese H\u00fcpfburgen betreten. Jeder dortige Akt entspricht einer H\u00fcpfburg.\nSie haben sie von einem friedlichen Raum in einen potenziell b\u00f6sen Ort verwandelt, der dem Helden wom\u00f6glich \u00fcble Streiche spielt [z.B. m\u00f6gliche unerwartete Todesstellen].\n", "\nDa die Turnhalle nun eine bedrohliche Ausstrahlung hat, wird sie den Helden \u2013 nachdem er den B\u00f6sewicht in ihrem Inneren erneut besiegt hat \u2013 direkt in einer seiner Umkleider\u00e4ume schicken; dort befindet sich die vierte Zone.\nIn diesem Raum stehen drei Waschbecken, die der Held passieren muss, um in den n\u00e4chsten Raum zu gelangen; dabei steht jedes der Waschbecken f\u00fcr einen der dortigen Akt.\nJeder dieser drei Waschbecken sind mit Wasser gef\u00fcllt. Der Held kann den Atem nur 30 Sekunden lang anhalten, bevor er den Wassertod stirbt.\n\nNachdem er aus dem Umkleideraum entkommen ist, betritt er einen friedlichen Raum, der Gymnastikraum. Hier befindet sich die f\u00fcnfte Zone.\nW\u00e4hrend sich der Held dort aufh\u00e4lt, schauen sich die Anwesenden gerade einen guten Film namens \u201eKPop Demon Hunters\u201c an.\n", "\nNachdem er den B\u00f6sewicht im Gymnastikraum besiegt hat, erreicht er das Klassenzimmer, in dem sich die letzten beiden Zonen befinden.\n\nVon au\u00dfen wirkt sie unschuldig und von innen gem\u00fctlich, doch sie birgt ihre eigenen Fallen, die dem Helden nach dem Leben trachten.\n\nIn Akt 1 bemerkt der Held, dass die Leute in ihrem Inneren einen Film ansehen. Dieser Film enth\u00e4lt zahlreiche Ger\u00e4usche von zerbrechendem Glas, die laut in ihr abgespielt werden.\nIn Akt 2 bemerkt der Held, dass in ihrem Inneren auch gekocht wird \u2013 sie verf\u00fcgt also \u00fcber eine Kochnische. Er befindet sich dort im unteren Bereich dieser Kochnische auf.\nIn Akt 3 \u00fcberrascht sie den Helden, indem sie ihn in ein weiteres Waschbecken bef\u00f6rdert \u2013 sie verf\u00fcgt also \u00fcber ein Waschbecken.\nNachdem der Held diesem Waschbecken entkommen ist, stellt er sich dem eigentlichen Bosskampf gegen sie.\nDer Held befindet sich immer noch im Klassenraum.  Er befindet sich dort im oberen Bereich seiner Kochnische auf.\n\nNachdem der Held den Boss in ihrem Inneren besiegt hat, kehrt er in die Turnhalle [dort wird eine Abschlussfeier gefeiert] zur\u00fcck (die wieder ihren Normalzustand angenommen hat), l\u00e4sst die Steine \u200b\u200b\u00fcber sich schweben und vollf\u00fchrt anschlie\u00dfend einen Siegersprung.\nDamit endet die Geschichte.\n", "\nFrage: Wie gelangt man in diese Spezial-Boxen? \nAntwort: Durch Hineinspringen in den riesigen Ring am Ende von Akt 1 und/oder 2, jeder Zone [f\u00fcr m\u00e4nnlich und weiblich], wenn du mindestens 50 Einheiten einer W\u00e4hrung hast, bevor du das Klassenzimmer erreichts.\nFakt: Das gute Ende l\u00e4sst sich erreichen, indem man den Boss im Klassenzimmer besiegt, nachdem alle Spezial-Boxen erfolgreich absolviert wurden.\n        \nWenn du im eigentlichen Spiel Glas zerbrichst, zerbrichst du auch Glas in dem entsprechenden Raum (basierend auf der jeweiligen Zone).\nDu kannst einen Raum komplett verw\u00fcsten, wenn du \u201ejedes einzelne\u201c Glasobjekt in der/den entsprechenden Zone(n) (gem\u00e4\u00df Beschreibung) zerbrichst.\nBesonderheit: Im vollst\u00e4ndigen Spieldurchlauf kannst du die Turnhalle tats\u00e4chlich zweimal verw\u00fcsten.\n\nWenn du bemerkst, dass das Spiel ruckelt, bedeutet das, dass du den Atem eines weiblichen Raums sp\u00fcren k\u00f6nntest.\n        "]}
+"""
+
+"""
+
+eyJTdG9wcHVociI6IDAuMCwgIlp3aXNjaGVuemVpdGVuIjogWzM5LjEyLCA1OS4yOSwgMTAzLjgxLCAxMzEuOTcsIDE5Ni41NSwgMjgzLjc5LCAzMDUuODMsIDQxNy40LCA0NDUuNzUsIDU3NS42MywgNjUyLjM2LCA2OTAuNywgNzU1LjkxLCA3NzIuMTgsIDkwMy43NCwgOTY4LjIzLCAxMDA3LjgxLCAxMTMwLjEyLCAxMTgyLjg3LCAxMjM1LjMxLCAxMzE3Ljg5LCAxMzgwLjAzLCAxNDQ4Ljk3LCAxNDg5LjAxLCAxNTgzLjI5XSwgIkFrdHVlbGxlIFp3aXNjaGVuemVpdGVuIjogW10sICJCZXN0ZSBTZWdtZW50ZSI6IFtbMTkzLjU0LCAzNTkuNjYsIDMyOC4xMSwgMjA0LCAxODcuMDksIDI2NS4yNl0sIFszNy4xNSwgMTguNiwgNDMsIDI2LCA2My4xNCwgODYuODksIDE4LjksIDk0LjksIDI4LjI1LCAxMTcuNTYsIDc2LjczLCAzOC4zNCwgNjMuMzEsIDE1LCAxMzEuNTYsIDYwLjMzLCAzMy41LCAxMDcuOTYsIDUyLjc1LCA0OS4wOCwgODIuNTgsIDYyLjE0LCA2NC4zLCAzOS40OSwgODBdLCBbXSwgW10sIFtdLCBbXSwgW10sIFtdLCBbXSwgW11dLCAiU3BpZWxuYW1lIjogIlNvbmljIFRoZSBIZWRnZWhvZyBHZW5lc2lzIChHQkEgLSBVU0EgVmVyc2lvbikiLCAiRHVyY2hsYXVma2F0ZWdvcmllIjogIltUYWcgMDAxMzldIEFsbGUgU21hcmFnZGUgaW0gSnViaWxcdTAwZTR1bXNtb2R1cyIsICJTZWdtZW50bmFtZW4iOiBbIi1Ba3QgMTogV2FzIGbDvHIgZWluIHNjaHdlcmVyIEFuZmFuZyEiLCAiLVNwZXppYWwgMTogRXMgZ2VodCBzY2huZWxsIHdpZWRlciB3ZWciLCAiLUFrdCAyOiBXaWxsIGRlbiBNb3RvYnVnIG5pY2h0IHTDtnRlbi4iLCAiLVNwZXppYWwgMjogRGllc2VzIFRpbWluZy4uLiIsICJcdTI2NDBcdWQ4M2NcdWRmYzAgMDAuMDggKlJFU0VULSpUdXJuaGFsbGUgW05vcm1hbF18QWt0IDM6IEJpdHRlIGtlaW5lIFRyZWZmZXIgdmVyZmVobGVuISIsICItQWt0IDE6IERJRSBaWUtMRU4hIiwgIi1TcGV6aWFsIDM6IFNQUklORyEiLCAiLUFrdCAyOiBCaXR0ZSBuaWNodCBnZXRyb2ZmZW4gd2VyZGVuISIsICItU3BlemlhbCA0OiBWZXJtYXNzZWwgZGFzIG5pY2h0LiIsICJcdTI2NDJcdWQ4M2NcdWRmNzMgMDAuMjUgSGF1cHRrXHUwMGZjY2hlIGRlciBTY2h1bGV8QWt0IDM6IEdlZsOkaHJsaWNoZXMgRW5kZSBlaW5lciBab25lIiwgIi1Ba3QgMTogTk9DSCBFSU4gWllLTFVTISIsICItU3BlemlhbCA1OiBNRUlORSBHUlx1MDBkNlNTVEUgU0NIV1x1MDBjNENIRSBET1JUISIsICItQWt0IDI6IEVUV0FTIEhFSUtMSUchIiwgIi1TcGV6aWFsIDY6IFNQUklORyEhIiwgIlx1MjY0MFx1ZDgzY1x1ZGZmMCAwMC4wOCBUdXJuaGFsbGUgW0FrdD1IXHUwMGZjcGZidXJnXXxBa3QgMzogSEVJS0xJRyBBTSBBTkZBTkchIiwgIi1Ba3QvV2FzY2hiZWNrZW4gMTogV2Fzc2VycGh5c2lrISIsICItQWt0L1dhc2NoYmVja2VuIDI6IE5cdTAwZmN0emxpY2hlciBTcHJ1bmdmZWRlciEiLCAiXHUyNjQyXHVkODNkXHVkZWJmIDAwLjExIFR1cm5oYWxsZS1VbWtsZWlkZXJhdW18QWt0L1dhc2NoYmVja2VuIDM6IFBBUktPVVJaRUlUISIsICItQWt0IDE6IFNpZSBzY2hhdWVuIGRhIGVpbiBndXRlbiBGaWxtIiwgIi1Ba3QgMjogU2llIHNjaGF1ZW4gc2ljaCBnZXJhZGUgXHUyMDFlR29sZGVuXHUyMDFjIGFuLiIsICJcdTI2NDJcdWQ4M2NcdWRmYWMgMTAuMDUgR3ltbmFzdGlrcmF1bSBbS2lub3JhdW1dfEFrdCAzOiBEaWVzZXIgRmlsbTogS1BvcCBEZW1vbiBIdW50ZXJzIiwgIi1cdWQ4M2RcdWRjY2QgQWt0IDEgW1JhdW1taXR0ZV06IERhIHdpcmQgYXVjaCBGaWxtIGdlc2NoYXV0ISIsICItXHVkODNjXHVkZjczIEFrdCAyIFtLb2NobmlzY2hlKFx1MjE5MyldOiBEYSB3aXJkIGdla29jaHQhIiwgIi1cdWQ4M2RcdWRlYjAgQWt0IDMgW1dhc2NoYmVja2VuXTogU28gaHlnaWVuaXNjaCBzY2hsYXUhIiwgIlx1MjY0MFx1ZDgzY1x1ZGY5MiAxMC4yOCBLbGFzc2VucmF1bSBbU2VodXNhc2NodWxlXXxcdWQ4M2NcdWRmN2QgQk9TUyBbS29jaG5pc2NoZShcdTIxOTEpXTogV0lFREVSIEhFSUtMSUchIl0sICJCZXNjaHJlaWJ1bmciOiBbIlxuTWVpbmUgQmVzY2hyZWlidW5nIGRlcyBEdXJjaGxhdWZzXG5cblxuU3BpZWx2ZXJzaW9uOiBTY2hsZWNodGVzdGUgb2ZmaXppZWxsZSBQb3J0aWVydW5nIGRlcyBTcGllbHNcbi0+IFNpZSBoYWJlbiBlcndhcnRldCwgZGFzcyBkaWVzZSBTcGllbHBvcnRpZXJ1bmcgZ3V0IHdpcmQuXG4tPiBFaW5lIEthdGFzdHJvcGhlLCBtaXQgZGVyIHNpZSBuaWNodCBnZXJlY2huZXQgaGF0dGVuLlxuLT4gRGllc2UgUG9ydGllcnVuZyBiYXNpZXJ0IHNpY2ggYXVmIGVpbmUgYW5kZXJlIFBvcnRpZXJ1bmcuXG4tPiBEYXMgZWlnZW50bGljaGUgU3BpZWwgaGF0IG5peCBtaXQgSG9ycm9yIHp1IHR1bi5cbk1ldGFzY29yZTogMzMvMTAwXG5BbnphaGwgZGVyIFpvbmVuOiA2ICsgMSA9IDdcbkFuemFobCBkZXIgdm9sbHN0XHUwMGU0bmRpZ2VuIFJcdTAwZTR1bWU6IDVcblJhdW1udW1tZXJuLCBHZXNjaGxlY2h0IHVuZCBOYW1lbiBkaWVzZXIgUlx1MDBlNHVtZTpcblx1MjVjZiAwMC4wOCBUdXJuaGFsbGUgW3dlaWJsaWNoXVxuXHUyNWNmIDAwLjI1IEhhdXB0a1x1MDBmY2NoZSBbbVx1MDBlNG5ubGljaF1cblx1MjVjZiAwMC4xMSBUdXJuaGFsbGUtVW1rbGVpZGVyYXVtIFttXHUwMGU0bm5saWNoXVxuXHUyNWNmIDEwLjA1IEd5bW5hc3Rpa3JhdW0gW21cdTAwZTRubmxpY2hdXG5cdTI1Y2YgMTAuMjggS2xhc3NlbnJhdW0gW3dlaWJsaWNoXVxuXG5TcGllbHJlaWhlbmZvbGdlIGRlciBhbmdlZ2ViZW5lbiBSXHUwMGU0dW1lOlxuXHUyNWNmIFR1cm5oYWxsZSAoTm9ybWFsKSAtPiBIYXVwdGtcdTAwZmNjaGUgLT4gVHVybmhhbGxlIChIXHUwMGZjcGZidXJnZW4pIC0+IFR1cm5oYWxsZS1VbWtsZWlkZXJhdW0gLT4gR3ltbmFzdGlrcmF1bSAtPiBLbGFzc2VucmF1bSAtPiBLbGFzc2VucmF1bSAoQk9TUylcblxuQW56YWhsIGRlciBTcGV6aWFsLUJveGVuOiA2XG4gICAgICAgICIsICJcbkljaCBiZXNjaHJlaWJlIGRpZXNlbiBMYXVmIGZvbGdlbmRlcm1hXHUwMGRmZW46XG5cblxuRGllIGVyc3RlIFpvbmUgYmVmaW5kZXQgc2ljaCBpbiBkZXIgVHVybmhhbGxlLlxuU2llIGJlZ3JcdTAwZmNcdTAwZGZ0IGRlbiBIZWxkIG1pdCB2aWVsIEJld2VndW5nc2ZyZWloZWl0LlxuXG5OYWNoZGVtIGVyIGRlbiBTY2hsZWNodGVuIGluIGRlciBlcnN0ZW4gWm9uZSBiZXNpZWd0IGhhdCwgZlx1MDBmY2xsdCBkZXIgSGVsZCBlaW4gZ3JvXHUwMGRmZW4gSHVuZ2VyLCBkYXNzIGVyIG5pY2h0IG1laHIgYXVzaGFsdGVuIGthbm4uXG5EaWUgendlaXRlIFpvbmUgYmVmaW5kZXQgc2ljaCBpbiBkZXIgSGF1cHRrXHUwMGZjY2hlLlxuRXIgZW50aFx1MDBlNGx0IGRyZWkgS1x1MDBmY2NoZW56ZWlsZW4sIHdvYmVpIGplZGVyIEFrdCBlaW5lIEtcdTAwZmNjaGVuemVpbGUgZGFyc3RlbGx0LlxuT2ggTmVpbiEgRGVyIEhlbGQgaGF0IHdhaHJzY2hlaW5saWNoIGVpbmVuIEZlaGxlciBnZW1hY2h0LlxuRG9ydCBzb2xsIGVyIHZlcnN1Y2hlbiBkaWUgaGVpXHUwMGRmZSBUZW1wZXJhdHVyZW4gYXVzenV3ZWljaGVuLlxuXG5EZXIgSGVsZCBiZWtvbW10IGVzIG51biBtaXQgZGVyIEhpdHplIHp1IHR1bi5cbkRlc2hhbGIgcmVubnQgZXIgenVyXHUwMGZjY2sgaW4gZGllIFR1cm5oYWxsZSBcdTIwMTMgZG9ydCBiZWZpbmRldCBzaWNoIGF1Y2ggZGllIGRyaXR0ZSBab25lIFx1MjAxMywgZG9jaCBlciBhaG50IG5pY2h0LCBkYXNzIGRpZSBMZWhyZXIgZ2VwbGFudCBoYWJlbiwgc2llIHp1IHZlcndhbmRlbG4sIGluZGVtIHNpZSBkcmVpIEhcdTAwZmNwZmJ1cmdlbiBpbiBpaHJlbSBJbm5lcmVuIGF1ZmJsYXNlbiwgd1x1MDBlNGhyZW5kIGVyIHNpY2ggbm9jaCBpbiBkZXIgSGF1cHRrXHUwMGZjY2hlIGF1ZmhcdTAwZTRsdFxuTnVuIG11c3MgZXIgZGllc2UgSFx1MDBmY3BmYnVyZ2VuIGJldHJldGVuLiBKZWRlciBkb3J0aWdlIEFrdCBlbnRzcHJpY2h0IGVpbmVyIEhcdTAwZmNwZmJ1cmcuXG5TaWUgaGFiZW4gc2llIHZvbiBlaW5lbSBmcmllZGxpY2hlbiBSYXVtIGluIGVpbmVuIHBvdGVuemllbGwgYlx1MDBmNnNlbiBPcnQgdmVyd2FuZGVsdCwgZGVyIGRlbSBIZWxkZW4gd29tXHUwMGY2Z2xpY2ggXHUwMGZjYmxlIFN0cmVpY2hlIHNwaWVsdCBbei5CLiBtXHUwMGY2Z2xpY2hlIHVuZXJ3YXJ0ZXRlIFRvZGVzc3RlbGxlbl0uXG4iLCAiXG5EYSBkaWUgVHVybmhhbGxlIG51biBlaW5lIGJlZHJvaGxpY2hlIEF1c3N0cmFobHVuZyBoYXQsIHdpcmQgc2llIGRlbiBIZWxkZW4gXHUyMDEzIG5hY2hkZW0gZXIgZGVuIEJcdTAwZjZzZXdpY2h0IGluIGlocmVtIElubmVyZW4gZXJuZXV0IGJlc2llZ3QgaGF0IFx1MjAxMyBkaXJla3QgaW4gZWluZXIgc2VpbmVyIFVta2xlaWRlclx1MDBlNHVtZSBzY2hpY2tlbjsgZG9ydCBiZWZpbmRldCBzaWNoIGRpZSB2aWVydGUgWm9uZS5cbkluIGRpZXNlbSBSYXVtIHN0ZWhlbiBkcmVpIFdhc2NoYmVja2VuLCBkaWUgZGVyIEhlbGQgcGFzc2llcmVuIG11c3MsIHVtIGluIGRlbiBuXHUwMGU0Y2hzdGVuIFJhdW0genUgZ2VsYW5nZW47IGRhYmVpIHN0ZWh0IGplZGVzIGRlciBXYXNjaGJlY2tlbiBmXHUwMGZjciBlaW5lbiBkZXIgZG9ydGlnZW4gQWt0LlxuSmVkZXIgZGllc2VyIGRyZWkgV2FzY2hiZWNrZW4gc2luZCBtaXQgV2Fzc2VyIGdlZlx1MDBmY2xsdC4gRGVyIEhlbGQga2FubiBkZW4gQXRlbSBudXIgMzAgU2VrdW5kZW4gbGFuZyBhbmhhbHRlbiwgYmV2b3IgZXIgZGVuIFdhc3NlcnRvZCBzdGlyYnQuXG5cbk5hY2hkZW0gZXIgYXVzIGRlbSBVbWtsZWlkZXJhdW0gZW50a29tbWVuIGlzdCwgYmV0cml0dCBlciBlaW5lbiBmcmllZGxpY2hlbiBSYXVtLCBkZXIgR3ltbmFzdGlrcmF1bS4gSGllciBiZWZpbmRldCBzaWNoIGRpZSBmXHUwMGZjbmZ0ZSBab25lLlxuV1x1MDBlNGhyZW5kIHNpY2ggZGVyIEhlbGQgZG9ydCBhdWZoXHUwMGU0bHQsIHNjaGF1ZW4gc2ljaCBkaWUgQW53ZXNlbmRlbiBnZXJhZGUgZWluZW4gZ3V0ZW4gRmlsbSBuYW1lbnMgXHUyMDFlS1BvcCBEZW1vbiBIdW50ZXJzXHUyMDFjIGFuLlxuIiwgIlxuTmFjaGRlbSBlciBkZW4gQlx1MDBmNnNld2ljaHQgaW0gR3ltbmFzdGlrcmF1bSBiZXNpZWd0IGhhdCwgZXJyZWljaHQgZXIgZGFzIEtsYXNzZW56aW1tZXIsIGluIGRlbSBzaWNoIGRpZSBsZXR6dGVuIGJlaWRlbiBab25lbiBiZWZpbmRlbi5cblxuVm9uIGF1XHUwMGRmZW4gd2lya3Qgc2llIHVuc2NodWxkaWcgdW5kIHZvbiBpbm5lbiBnZW1cdTAwZmN0bGljaCwgZG9jaCBzaWUgYmlyZ3QgaWhyZSBlaWdlbmVuIEZhbGxlbiwgZGllIGRlbSBIZWxkZW4gbmFjaCBkZW0gTGViZW4gdHJhY2h0ZW4uXG5cbkluIEFrdCAxIGJlbWVya3QgZGVyIEhlbGQsIGRhc3MgZGllIExldXRlIGluIGlocmVtIElubmVyZW4gZWluZW4gRmlsbSBhbnNlaGVuLiBEaWVzZXIgRmlsbSBlbnRoXHUwMGU0bHQgemFobHJlaWNoZSBHZXJcdTAwZTR1c2NoZSB2b24gemVyYnJlY2hlbmRlbSBHbGFzLCBkaWUgbGF1dCBpbiBpaHIgYWJnZXNwaWVsdCB3ZXJkZW4uXG5JbiBBa3QgMiBiZW1lcmt0IGRlciBIZWxkLCBkYXNzIGluIGlocmVtIElubmVyZW4gYXVjaCBnZWtvY2h0IHdpcmQgXHUyMDEzIHNpZSB2ZXJmXHUwMGZjZ3QgYWxzbyBcdTAwZmNiZXIgZWluZSBLb2NobmlzY2hlLiBFciBiZWZpbmRldCBzaWNoIGRvcnQgaW0gdW50ZXJlbiBCZXJlaWNoIGRpZXNlciBLb2NobmlzY2hlIGF1Zi5cbkluIEFrdCAzIFx1MDBmY2JlcnJhc2NodCBzaWUgZGVuIEhlbGRlbiwgaW5kZW0gc2llIGlobiBpbiBlaW4gd2VpdGVyZXMgV2FzY2hiZWNrZW4gYmVmXHUwMGY2cmRlcnQgXHUyMDEzIHNpZSB2ZXJmXHUwMGZjZ3QgYWxzbyBcdTAwZmNiZXIgZWluIFdhc2NoYmVja2VuLlxuTmFjaGRlbSBkZXIgSGVsZCBkaWVzZW0gV2FzY2hiZWNrZW4gZW50a29tbWVuIGlzdCwgc3RlbGx0IGVyIHNpY2ggZGVtIGVpZ2VudGxpY2hlbiBCb3Nza2FtcGYgZ2VnZW4gc2llLlxuRGVyIEhlbGQgYmVmaW5kZXQgc2ljaCBpbW1lciBub2NoIGltIEtsYXNzZW5yYXVtLiAgRXIgYmVmaW5kZXQgc2ljaCBkb3J0IGltIG9iZXJlbiBCZXJlaWNoIHNlaW5lciBLb2NobmlzY2hlIGF1Zi5cblxuTmFjaGRlbSBkZXIgSGVsZCBkZW4gQm9zcyBpbiBpaHJlbSBJbm5lcmVuIGJlc2llZ3QgaGF0LCBrZWhydCBlciBpbiBkaWUgVHVybmhhbGxlIFtkb3J0IHdpcmQgZWluZSBBYnNjaGx1c3NmZWllciBnZWZlaWVydF0genVyXHUwMGZjY2sgKGRpZSB3aWVkZXIgaWhyZW4gTm9ybWFsenVzdGFuZCBhbmdlbm9tbWVuIGhhdCksIGxcdTAwZTRzc3QgZGllIFN0ZWluZSBcdTIwMGJcdTIwMGJcdTAwZmNiZXIgc2ljaCBzY2h3ZWJlbiB1bmQgdm9sbGZcdTAwZmNocnQgYW5zY2hsaWVcdTAwZGZlbmQgZWluZW4gU2llZ2Vyc3BydW5nLlxuRGFtaXQgZW5kZXQgZGllIEdlc2NoaWNodGUuXG4iLCAiXG5GcmFnZTogV2llIGdlbGFuZ3QgbWFuIGluIGRpZXNlIFNwZXppYWwtQm94ZW4/IFxuQW50d29ydDogRHVyY2ggSGluZWluc3ByaW5nZW4gaW4gZGVuIHJpZXNpZ2VuIFJpbmcgYW0gRW5kZSB2b24gQWt0IDEgdW5kL29kZXIgMiwgamVkZXIgWm9uZSBbZlx1MDBmY3IgbVx1MDBlNG5ubGljaCB1bmQgd2VpYmxpY2hdLCB3ZW5uIGR1IG1pbmRlc3RlbnMgNTAgRWluaGVpdGVuIGVpbmVyIFdcdTAwZTRocnVuZyBoYXN0LCBiZXZvciBkdSBkYXMgS2xhc3NlbnppbW1lciBlcnJlaWNodHMuXG5GYWt0OiBEYXMgZ3V0ZSBFbmRlIGxcdTAwZTRzc3Qgc2ljaCBlcnJlaWNoZW4sIGluZGVtIG1hbiBkZW4gQm9zcyBpbSBLbGFzc2VuemltbWVyIGJlc2llZ3QsIG5hY2hkZW0gYWxsZSBTcGV6aWFsLUJveGVuIGVyZm9sZ3JlaWNoIGFic29sdmllcnQgd3VyZGVuLlxuICAgICAgICBcbldlbm4gZHUgaW0gZWlnZW50bGljaGVuIFNwaWVsIEdsYXMgemVyYnJpY2hzdCwgemVyYnJpY2hzdCBkdSBhdWNoIEdsYXMgaW4gZGVtIGVudHNwcmVjaGVuZGVuIFJhdW0gKGJhc2llcmVuZCBhdWYgZGVyIGpld2VpbGlnZW4gWm9uZSkuXG5EdSBrYW5uc3QgZWluZW4gUmF1bSBrb21wbGV0dCB2ZXJ3XHUwMGZjc3Rlbiwgd2VubiBkdSBcdTIwMWVqZWRlcyBlaW56ZWxuZVx1MjAxYyBHbGFzb2JqZWt0IGluIGRlci9kZW4gZW50c3ByZWNoZW5kZW4gWm9uZShuKSAoZ2VtXHUwMGU0XHUwMGRmIEJlc2NocmVpYnVuZykgemVyYnJpY2hzdC5cbkJlc29uZGVyaGVpdDogSW0gdm9sbHN0XHUwMGU0bmRpZ2VuIFNwaWVsZHVyY2hsYXVmIGthbm5zdCBkdSBkaWUgVHVybmhhbGxlIHRhdHNcdTAwZTRjaGxpY2ggendlaW1hbCB2ZXJ3XHUwMGZjc3Rlbi5cblxuV2VubiBkdSBiZW1lcmtzdCwgZGFzcyBkYXMgU3BpZWwgcnVja2VsdCwgYmVkZXV0ZXQgZGFzLCBkYXNzIGR1IGRlbiBBdGVtIGVpbmVzIHdlaWJsaWNoZW4gUmF1bXMgc3BcdTAwZmNyZW4ga1x1MDBmNm5udGVzdC5cbiAgICAgICAgIl19
+
+
+"""
+
+"""
+
+eyJTdG9wcHVociI6IDE1OTkuNzI5MzEwNzUwOTYxMywgIlp3aXNjaGVuemVpdGVuIjogWzM5LjEyLCA1OS4yOSwgMTAzLjgxLCAxMzEuOTcsIDE5Ni41NSwgMjgzLjc5LCAzMDUuODMsIDQxNy40LCA0NDUuNzUsIDU3NS42MywgNjUyLjM2LCA2OTAuNywgNzU1LjkxLCA3NzIuMTgsIDkwMy43NCwgOTY4LjIzLCAxMDA3LjgxLCAxMTMwLjEyLCAxMTgyLjg3LCAxMjM1LjMxLCAxMzE3Ljg5LCAxMzgwLjAzLCAxNDQ4Ljk3LCAxNDg5LjAxLCAxNTgzLjI5XSwgIkFrdHVlbGxlIFp3aXNjaGVuemVpdGVuIjogWzM3LjAyMzc4MDM0NTkxNjc1LCA1Ny4xMTQ2NzEyMzAzMTYxNiwgMTAxLjU3OTI5ODQ5NjI0NjM0LCAxMzAuOTQ2NTM0NjMzNjM2NDcsIDE5Mi42MzY2MTE3MDAwNTc5OCwgMjc5LjQ0MDg0MTkxMzIyMzI3LCAyOTkuMjcxNzAzOTU4NTExMzUsIDQwMi42MTkwNjE5NDY4Njg5LCA0NDAuNjc5MDA2MDk5NzAwOSwgNTY1LjQxNzEyMDIxODI3NywgNjQwLjUyMjc5ODc3NjYyNjYsIDY4MS44NjA1OTgwODczMTA4LCA3NDQuOTM0NzgxMDc0NTIzOSwgNzYxLjQxNzY3NDMwMzA1NDgsIDkwNS4zODkyMzA0ODk3MzA4LCA5NjkuMTQzODYzMjAxMTQxNCwgMTAwNC4xMDMxMzMyMDE1OTkxLCAxMTEwLjgyMjAzODY1MDUxMjcsIDExNjYuNzgxMTA1Mjc5OTIyNSwgMTIxOS4yNjM5MTYwMTU2MjUsIDEzMzAuNTg2NTUwOTUxMDA0LCAxMzkzLjE3MTM4NzkxMDg0MywgMTQ2Mi4zMDIxMTE2MjU2NzE0LCAxNTA1LjU1MTgzMTI0NTQyMjQsIDE1OTkuNjgzMTc5NjE2OTI4XSwgIkJlc3RlIFNlZ21lbnRlIjogW1sxOTMuNTQsIDM1OS42NiwgMzI4LjExLCAyMDQsIDE4Ny4wOSwgMjY1LjI2XSwgWzM3LjE1LCAxOC42LCA0MywgMjYsIDYzLjE0LCA4Ni44OSwgMTguOSwgOTQuOSwgMjguMjUsIDExNy41NiwgNzYuNzMsIDM4LjM0LCA2My4zMSwgMTUsIDEzMS41NiwgNjAuMzMsIDMzLjUsIDEwNy45NiwgNTIuNzUsIDQ5LjA4LCA4Mi41OCwgNjIuMTQsIDY0LjMsIDM5LjQ5LCA4MF0sIFtdLCBbXSwgW10sIFtdLCBbXSwgW10sIFtdLCBbXV0sICJTcGllbG5hbWUiOiAiU29uaWMgVGhlIEhlZGdlaG9nIEdlbmVzaXMgKEdCQSAtIFVTQSBWZXJzaW9uKSIsICJEdXJjaGxhdWZrYXRlZ29yaWUiOiAiW1RhZyAwMDEzOV0gQWxsZSBTbWFyYWdkZSBpbSBKdWJpbFx1MDBlNHVtc21vZHVzIiwgIlNlZ21lbnRuYW1lbiI6IFsiLUFrdCAxOiBXYXMgZlx1MDBmY3IgZWluIHNjaHdlcmVyIEFuZmFuZyEiLCAiLVNwZXppYWwgMTogRXMgZ2VodCBzY2huZWxsIHdpZWRlciB3ZWciLCAiLUFrdCAyOiBXaWxsIGRlbiBNb3RvYnVnIG5pY2h0IHRcdTAwZjZ0ZW4uIiwgIi1TcGV6aWFsIDI6IERpZXNlcyBUaW1pbmcuLi4iLCAiXHUyNjQwXHVkODNjXHVkZmMwIDAwLjA4ICpSRVNFVC0qVHVybmhhbGxlIFtOb3JtYWxdfEFrdCAzOiBCaXR0ZSBrZWluZSBUcmVmZmVyIHZlcmZlaGxlbiEiLCAiLUFrdCAxOiBESUUgWllLTEVOISIsICItU3BlemlhbCAzOiBTUFJJTkchIiwgIi1Ba3QgMjogQml0dGUgbmljaHQgZ2V0cm9mZmVuIHdlcmRlbiEiLCAiLVNwZXppYWwgNDogVmVybWFzc2VsIGRhcyBuaWNodC4iLCAiXHUyNjQyXHVkODNjXHVkZjczIDAwLjI1IEhhdXB0a1x1MDBmY2NoZSBkZXIgU2NodWxlfEFrdCAzOiBHZWZcdTAwZTRocmxpY2hlcyBFbmRlIGVpbmVyIFpvbmUiLCAiLUFrdCAxOiBOT0NIIEVJTiBaWUtMVVMhIiwgIi1TcGV6aWFsIDU6IE1FSU5FIEdSXHUwMGQ2U1NURSBTQ0hXXHUwMGM0Q0hFIERPUlQhIiwgIi1Ba3QgMjogRVRXQVMgSEVJS0xJRyEiLCAiLVNwZXppYWwgNjogU1BSSU5HISEiLCAiXHUyNjQwXHVkODNjXHVkZmYwIDAwLjA4IFR1cm5oYWxsZSBbQWt0PUhcdTAwZmNwZmJ1cmddfEFrdCAzOiBIRUlLTElHIEFNIEFORkFORyEiLCAiLUFrdC9XYXNjaGJlY2tlbiAxOiBXYXNzZXJwaHlzaWshIiwgIi1Ba3QvV2FzY2hiZWNrZW4gMjogTlx1MDBmY3R6bGljaGVyIFNwcnVuZ2ZlZGVyISIsICJcdTI2NDJcdWQ4M2RcdWRlYmYgMDAuMTEgVHVybmhhbGxlLVVta2xlaWRlcmF1bXxBa3QvV2FzY2hiZWNrZW4gMzogUEFSS09VUlpFSVQhIiwgIi1Ba3QgMTogU2llIHNjaGF1ZW4gZGEgZWluIGd1dGVuIEZpbG0iLCAiLUFrdCAyOiBTaWUgc2NoYXVlbiBzaWNoIGdlcmFkZSBcdTIwMWVHb2xkZW5cdTIwMWMgYW4uIiwgIlx1MjY0Mlx1ZDgzY1x1ZGZhYyAxMC4wNSBHeW1uYXN0aWtyYXVtIFtLaW5vcmF1bV18QWt0IDM6IERpZXNlciBGaWxtOiBLUG9wIERlbW9uIEh1bnRlcnMiLCAiLVx1ZDgzZFx1ZGNjZCBBa3QgMSBbUmF1bW1pdHRlXTogRGEgd2lyZCBhdWNoIEZpbG0gZ2VzY2hhdXQhIiwgIi1cdWQ4M2NcdWRmNzMgQWt0IDIgW0tvY2huaXNjaGUoXHUyMTkzKV06IERhIHdpcmQgZ2Vrb2NodCEiLCAiLVx1ZDgzZFx1ZGViMCBBa3QgMyBbV2FzY2hiZWNrZW5dOiBTbyBoeWdpZW5pc2NoIHNjaGxhdSEiLCAiXHUyNjQwXHVkODNjXHVkZjkyIDEwLjI4IEtsYXNzZW5yYXVtIFtTZWh1c2FzY2h1bGVdfFx1ZDgzY1x1ZGY3ZCBCT1NTIFtLb2NobmlzY2hlKFx1MjE5MSldOiBXSUVERVIgSEVJS0xJRyEiXSwgIkJlc2NocmVpYnVuZyI6IFsiXG5NZWluZSBCZXNjaHJlaWJ1bmcgZGVzIER1cmNobGF1ZnNcblxuXG5TcGllbHZlcnNpb246IFNjaGxlY2h0ZXN0ZSBvZmZpemllbGxlIFBvcnRpZXJ1bmcgZGVzIFNwaWVsc1xuLT4gU2llIGhhYmVuIGVyd2FydGV0LCBkYXNzIGRpZXNlIFNwaWVscG9ydGllcnVuZyBndXQgd2lyZC5cbi0+IEVpbmUgS2F0YXN0cm9waGUsIG1pdCBkZXIgc2llIG5pY2h0IGdlcmVjaG5ldCBoYXR0ZW4uXG4tPiBEaWVzZSBQb3J0aWVydW5nIGJhc2llcnQgc2ljaCBhdWYgZWluZSBhbmRlcmUgUG9ydGllcnVuZy5cbi0+IERhcyBlaWdlbnRsaWNoZSBTcGllbCBoYXQgbml4IG1pdCBIb3Jyb3IgenUgdHVuLlxuTWV0YXNjb3JlOiAzMy8xMDBcbkFuemFobCBkZXIgWm9uZW46IDYgKyAxID0gN1xuQW56YWhsIGRlciB2b2xsc3RcdTAwZTRuZGlnZW4gUlx1MDBlNHVtZTogNVxuUmF1bW51bW1lcm4sIEdlc2NobGVjaHQgdW5kIE5hbWVuIGRpZXNlciBSXHUwMGU0dW1lOlxuXHUyNWNmIDAwLjA4IFR1cm5oYWxsZSBbd2VpYmxpY2hdXG5cdTI1Y2YgMDAuMjUgSGF1cHRrXHUwMGZjY2hlIFttXHUwMGU0bm5saWNoXVxuXHUyNWNmIDAwLjExIFR1cm5oYWxsZS1VbWtsZWlkZXJhdW0gW21cdTAwZTRubmxpY2hdXG5cdTI1Y2YgMTAuMDUgR3ltbmFzdGlrcmF1bSBbbVx1MDBlNG5ubGljaF1cblx1MjVjZiAxMC4yOCBLbGFzc2VucmF1bSBbd2VpYmxpY2hdXG5cblNwaWVscmVpaGVuZm9sZ2UgZGVyIGFuZ2VnZWJlbmVuIFJcdTAwZTR1bWU6XG5cdTI1Y2YgVHVybmhhbGxlIChOb3JtYWwpIC0+IEhhdXB0a1x1MDBmY2NoZSAtPiBUdXJuaGFsbGUgKEhcdTAwZmNwZmJ1cmdlbikgLT4gVHVybmhhbGxlLVVta2xlaWRlcmF1bSAtPiBHeW1uYXN0aWtyYXVtIC0+IEtsYXNzZW5yYXVtIC0+IEtsYXNzZW5yYXVtIChCT1NTKVxuXG5BbnphaGwgZGVyIFNwZXppYWwtQm94ZW46IDZcbiAgICAgICAgIiwgIlxuSWNoIGJlc2NocmVpYmUgZGllc2VuIExhdWYgZm9sZ2VuZGVybWFcdTAwZGZlbjpcblxuXG5EaWUgZXJzdGUgWm9uZSBiZWZpbmRldCBzaWNoIGluIGRlciBUdXJuaGFsbGUuXG5TaWUgYmVnclx1MDBmY1x1MDBkZnQgZGVuIEhlbGQgbWl0IHZpZWwgQmV3ZWd1bmdzZnJlaWhlaXQuXG5cbk5hY2hkZW0gZXIgZGVuIFNjaGxlY2h0ZW4gaW4gZGVyIGVyc3RlbiBab25lIGJlc2llZ3QgaGF0LCBmXHUwMGZjbGx0IGRlciBIZWxkIGVpbiBncm9cdTAwZGZlbiBIdW5nZXIsIGRhc3MgZXIgbmljaHQgbWVociBhdXNoYWx0ZW4ga2Fubi5cbkRpZSB6d2VpdGUgWm9uZSBiZWZpbmRldCBzaWNoIGluIGRlciBIYXVwdGtcdTAwZmNjaGUuXG5FciBlbnRoXHUwMGU0bHQgZHJlaSBLXHUwMGZjY2hlbnplaWxlbiwgd29iZWkgamVkZXIgQWt0IGVpbmUgS1x1MDBmY2NoZW56ZWlsZSBkYXJzdGVsbHQuXG5PaCBOZWluISBEZXIgSGVsZCBoYXQgd2FocnNjaGVpbmxpY2ggZWluZW4gRmVobGVyIGdlbWFjaHQuXG5Eb3J0IHNvbGwgZXIgdmVyc3VjaGVuIGRpZSBoZWlcdTAwZGZlIFRlbXBlcmF0dXJlbiBhdXN6dXdlaWNoZW4uXG5cbkRlciBIZWxkIGJla29tbXQgZXMgbnVuIG1pdCBkZXIgSGl0emUgenUgdHVuLlxuRGVzaGFsYiByZW5udCBlciB6dXJcdTAwZmNjayBpbiBkaWUgVHVybmhhbGxlIFx1MjAxMyBkb3J0IGJlZmluZGV0IHNpY2ggYXVjaCBkaWUgZHJpdHRlIFpvbmUgXHUyMDEzLCBkb2NoIGVyIGFobnQgbmljaHQsIGRhc3MgZGllIExlaHJlciBnZXBsYW50IGhhYmVuLCBzaWUgenUgdmVyd2FuZGVsbiwgaW5kZW0gc2llIGRyZWkgSFx1MDBmY3BmYnVyZ2VuIGluIGlocmVtIElubmVyZW4gYXVmYmxhc2VuLCB3XHUwMGU0aHJlbmQgZXIgc2ljaCBub2NoIGluIGRlciBIYXVwdGtcdTAwZmNjaGUgYXVmaFx1MDBlNGx0XG5OdW4gbXVzcyBlciBkaWVzZSBIXHUwMGZjcGZidXJnZW4gYmV0cmV0ZW4uIEplZGVyIGRvcnRpZ2UgQWt0IGVudHNwcmljaHQgZWluZXIgSFx1MDBmY3BmYnVyZy5cblNpZSBoYWJlbiBzaWUgdm9uIGVpbmVtIGZyaWVkbGljaGVuIFJhdW0gaW4gZWluZW4gcG90ZW56aWVsbCBiXHUwMGY2c2VuIE9ydCB2ZXJ3YW5kZWx0LCBkZXIgZGVtIEhlbGRlbiB3b21cdTAwZjZnbGljaCBcdTAwZmNibGUgU3RyZWljaGUgc3BpZWx0IFt6LkIuIG1cdTAwZjZnbGljaGUgdW5lcndhcnRldGUgVG9kZXNzdGVsbGVuXS5cbiIsICJcbkRhIGRpZSBUdXJuaGFsbGUgbnVuIGVpbmUgYmVkcm9obGljaGUgQXVzc3RyYWhsdW5nIGhhdCwgd2lyZCBzaWUgZGVuIEhlbGRlbiBcdTIwMTMgbmFjaGRlbSBlciBkZW4gQlx1MDBmNnNld2ljaHQgaW4gaWhyZW0gSW5uZXJlbiBlcm5ldXQgYmVzaWVndCBoYXQgXHUyMDEzIGRpcmVrdCBpbiBlaW5lciBzZWluZXIgVW1rbGVpZGVyXHUwMGU0dW1lIHNjaGlja2VuOyBkb3J0IGJlZmluZGV0IHNpY2ggZGllIHZpZXJ0ZSBab25lLlxuSW4gZGllc2VtIFJhdW0gc3RlaGVuIGRyZWkgV2FzY2hiZWNrZW4sIGRpZSBkZXIgSGVsZCBwYXNzaWVyZW4gbXVzcywgdW0gaW4gZGVuIG5cdTAwZTRjaHN0ZW4gUmF1bSB6dSBnZWxhbmdlbjsgZGFiZWkgc3RlaHQgamVkZXMgZGVyIFdhc2NoYmVja2VuIGZcdTAwZmNyIGVpbmVuIGRlciBkb3J0aWdlbiBBa3QuXG5KZWRlciBkaWVzZXIgZHJlaSBXYXNjaGJlY2tlbiBzaW5kIG1pdCBXYXNzZXIgZ2VmXHUwMGZjbGx0LiBEZXIgSGVsZCBrYW5uIGRlbiBBdGVtIG51ciAzMCBTZWt1bmRlbiBsYW5nIGFuaGFsdGVuLCBiZXZvciBlciBkZW4gV2Fzc2VydG9kIHN0aXJidC5cblxuTmFjaGRlbSBlciBhdXMgZGVtIFVta2xlaWRlcmF1bSBlbnRrb21tZW4gaXN0LCBiZXRyaXR0IGVyIGVpbmVuIGZyaWVkbGljaGVuIFJhdW0sIGRlciBHeW1uYXN0aWtyYXVtLiBIaWVyIGJlZmluZGV0IHNpY2ggZGllIGZcdTAwZmNuZnRlIFpvbmUuXG5XXHUwMGU0aHJlbmQgc2ljaCBkZXIgSGVsZCBkb3J0IGF1ZmhcdTAwZTRsdCwgc2NoYXVlbiBzaWNoIGRpZSBBbndlc2VuZGVuIGdlcmFkZSBlaW5lbiBndXRlbiBGaWxtIG5hbWVucyBcdTIwMWVLUG9wIERlbW9uIEh1bnRlcnNcdTIwMWMgYW4uXG4iLCAiXG5OYWNoZGVtIGVyIGRlbiBCXHUwMGY2c2V3aWNodCBpbSBHeW1uYXN0aWtyYXVtIGJlc2llZ3QgaGF0LCBlcnJlaWNodCBlciBkYXMgS2xhc3NlbnppbW1lciwgaW4gZGVtIHNpY2ggZGllIGxldHp0ZW4gYmVpZGVuIFpvbmVuIGJlZmluZGVuLlxuXG5Wb24gYXVcdTAwZGZlbiB3aXJrdCBzaWUgdW5zY2h1bGRpZyB1bmQgdm9uIGlubmVuIGdlbVx1MDBmY3RsaWNoLCBkb2NoIHNpZSBiaXJndCBpaHJlIGVpZ2VuZW4gRmFsbGVuLCBkaWUgZGVtIEhlbGRlbiBuYWNoIGRlbSBMZWJlbiB0cmFjaHRlbi5cblxuSW4gQWt0IDEgYmVtZXJrdCBkZXIgSGVsZCwgZGFzcyBkaWUgTGV1dGUgaW4gaWhyZW0gSW5uZXJlbiBlaW5lbiBGaWxtIGFuc2VoZW4uIERpZXNlciBGaWxtIGVudGhcdTAwZTRsdCB6YWhscmVpY2hlIEdlclx1MDBlNHVzY2hlIHZvbiB6ZXJicmVjaGVuZGVtIEdsYXMsIGRpZSBsYXV0IGluIGlociBhYmdlc3BpZWx0IHdlcmRlbi5cbkluIEFrdCAyIGJlbWVya3QgZGVyIEhlbGQsIGRhc3MgaW4gaWhyZW0gSW5uZXJlbiBhdWNoIGdla29jaHQgd2lyZCBcdTIwMTMgc2llIHZlcmZcdTAwZmNndCBhbHNvIFx1MDBmY2JlciBlaW5lIEtvY2huaXNjaGUuIEVyIGJlZmluZGV0IHNpY2ggZG9ydCBpbSB1bnRlcmVuIEJlcmVpY2ggZGllc2VyIEtvY2huaXNjaGUgYXVmLlxuSW4gQWt0IDMgXHUwMGZjYmVycmFzY2h0IHNpZSBkZW4gSGVsZGVuLCBpbmRlbSBzaWUgaWhuIGluIGVpbiB3ZWl0ZXJlcyBXYXNjaGJlY2tlbiBiZWZcdTAwZjZyZGVydCBcdTIwMTMgc2llIHZlcmZcdTAwZmNndCBhbHNvIFx1MDBmY2JlciBlaW4gV2FzY2hiZWNrZW4uXG5OYWNoZGVtIGRlciBIZWxkIGRpZXNlbSBXYXNjaGJlY2tlbiBlbnRrb21tZW4gaXN0LCBzdGVsbHQgZXIgc2ljaCBkZW0gZWlnZW50bGljaGVuIEJvc3NrYW1wZiBnZWdlbiBzaWUuXG5EZXIgSGVsZCBiZWZpbmRldCBzaWNoIGltbWVyIG5vY2ggaW0gS2xhc3NlbnJhdW0uICBFciBiZWZpbmRldCBzaWNoIGRvcnQgaW0gb2JlcmVuIEJlcmVpY2ggc2VpbmVyIEtvY2huaXNjaGUgYXVmLlxuXG5OYWNoZGVtIGRlciBIZWxkIGRlbiBCb3NzIGluIGlocmVtIElubmVyZW4gYmVzaWVndCBoYXQsIGtlaHJ0IGVyIGluIGRpZSBUdXJuaGFsbGUgW2RvcnQgd2lyZCBlaW5lIEFic2NobHVzc2ZlaWVyIGdlZmVpZXJ0XSB6dXJcdTAwZmNjayAoZGllIHdpZWRlciBpaHJlbiBOb3JtYWx6dXN0YW5kIGFuZ2Vub21tZW4gaGF0KSwgbFx1MDBlNHNzdCBkaWUgU3RlaW5lIFx1MjAwYlx1MjAwYlx1MDBmY2JlciBzaWNoIHNjaHdlYmVuIHVuZCB2b2xsZlx1MDBmY2hydCBhbnNjaGxpZVx1MDBkZmVuZCBlaW5lbiBTaWVnZXJzcHJ1bmcuXG5EYW1pdCBlbmRldCBkaWUgR2VzY2hpY2h0ZS5cbiIsICJcbkZyYWdlOiBXaWUgZ2VsYW5ndCBtYW4gaW4gZGllc2UgU3BlemlhbC1Cb3hlbj8gXG5BbnR3b3J0OiBEdXJjaCBIaW5laW5zcHJpbmdlbiBpbiBkZW4gcmllc2lnZW4gUmluZyBhbSBFbmRlIHZvbiBBa3QgMSB1bmQvb2RlciAyLCBqZWRlciBab25lIFtmXHUwMGZjciBtXHUwMGU0bm5saWNoIHVuZCB3ZWlibGljaF0sIHdlbm4gZHUgbWluZGVzdGVucyA1MCBFaW5oZWl0ZW4gZWluZXIgV1x1MDBlNGhydW5nIGhhc3QsIGJldm9yIGR1IGRhcyBLbGFzc2VuemltbWVyIGVycmVpY2h0cy5cbkZha3Q6IERhcyBndXRlIEVuZGUgbFx1MDBlNHNzdCBzaWNoIGVycmVpY2hlbiwgaW5kZW0gbWFuIGRlbiBCb3NzIGltIEtsYXNzZW56aW1tZXIgYmVzaWVndCwgbmFjaGRlbSBhbGxlIFNwZXppYWwtQm94ZW4gZXJmb2xncmVpY2ggYWJzb2x2aWVydCB3dXJkZW4uXG4gICAgICAgIFxuV2VubiBkdSBpbSBlaWdlbnRsaWNoZW4gU3BpZWwgR2xhcyB6ZXJicmljaHN0LCB6ZXJicmljaHN0IGR1IGF1Y2ggR2xhcyBpbiBkZW0gZW50c3ByZWNoZW5kZW4gUmF1bSAoYmFzaWVyZW5kIGF1ZiBkZXIgamV3ZWlsaWdlbiBab25lKS5cbkR1IGthbm5zdCBlaW5lbiBSYXVtIGtvbXBsZXR0IHZlcndcdTAwZmNzdGVuLCB3ZW5uIGR1IFx1MjAxZWplZGVzIGVpbnplbG5lXHUyMDFjIEdsYXNvYmpla3QgaW4gZGVyL2RlbiBlbnRzcHJlY2hlbmRlbiBab25lKG4pIChnZW1cdTAwZTRcdTAwZGYgQmVzY2hyZWlidW5nKSB6ZXJicmljaHN0LlxuQmVzb25kZXJoZWl0OiBJbSB2b2xsc3RcdTAwZTRuZGlnZW4gU3BpZWxkdXJjaGxhdWYga2FubnN0IGR1IGRpZSBUdXJuaGFsbGUgdGF0c1x1MDBlNGNobGljaCB6d2VpbWFsIHZlcndcdTAwZmNzdGVuLlxuXG5XZW5uIGR1IGJlbWVya3N0LCBkYXNzIGRhcyBTcGllbCBydWNrZWx0LCBiZWRldXRldCBkYXMsIGRhc3MgZHUgZGVuIEF0ZW0gZWluZXMgd2VpYmxpY2hlbiBSYXVtcyBzcFx1MDBmY3JlbiBrXHUwMGY2bm50ZXN0LlxuICAgICAgICAiXX0=
+
+
+"""
